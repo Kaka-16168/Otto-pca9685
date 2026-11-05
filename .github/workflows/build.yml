@@ -34,11 +34,12 @@ jobs:
         env:
           BOARD_TYPE: otto-robot
 
-      - name: Merge and Upload Firmware
+      - name: Merge Firmware
         run: |
           cd xiaozhi-esp32
-          python $IDF_PATH/components/esptool_py/esptool/esptool.py --chip esp32s3 merge_bin -o build/otto-firmware-full.bin @flash_args
-          
+          # 使用 idf.py merge-bin 命令，ESP-IDF v6 原生支持，无需手动指定 esptool 路径
+          idf.py merge-bin -o build/otto-firmware-full.bin
+
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
         with:
