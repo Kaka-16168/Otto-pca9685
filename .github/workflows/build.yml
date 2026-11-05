@@ -1,0 +1,40 @@
+name: Build Otto Firmware
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive' # 拉取子模块，至关重要[reference:3]
+
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.2 # 参考官方推荐版本[reference:4]
+          target: esp32s3         # 你的芯片型号
+          # 关键：指定编译的板子类型，必须与 config.json 中的 "type" 一致
+          # 如果你的板子类型不是 "otto-robot"，请根据实际情况修改
+          command: |
+            idf.py set-target esp32s3
+            idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;boards/otto-robot/sdkconfig.defaults" build
+
+      - name: Merge and Upload Firmware
+        if: success()
+        run: |
+          # 1. 合并固件为单个 bin 文件，方便烧录
+          idf.py merge-bin -o build/otto-firmware-full.bin
+          
+          # 2. 将产物上传到 Actions Artifacts，供下载
+          # 使用 actions/upload-artifact@v4 确保产物可用[reference:6]
+        uses: actions/upload-artifact@v4
+        with:
+          name: otto-firmware
+          path: build/otto-firmware-full.bin
