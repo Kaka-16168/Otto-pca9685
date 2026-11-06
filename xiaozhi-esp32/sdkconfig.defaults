@@ -76,3 +76,16 @@ CONFIG_LV_USE_WIN=n
 
 CONFIG_LV_BUILD_EXAMPLES=n
 CONFIG_LV_BUILD_DEMOS=n
+
+# ==========================================
+# 强制指定为 Otto Robot 板型
+# ==========================================
+CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+# CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
+
+# ==========================================
+# 自定义唤醒词配置 (OTA必备)
+# ==========================================
+CONFIG_USE_CUSTOM_WAKE_WORD=y
+CONFIG_CUSTOM_WAKE_WORD="你好小智"
+CONFIG_SR_MN_CN_MULTINET7_QUANT=y
