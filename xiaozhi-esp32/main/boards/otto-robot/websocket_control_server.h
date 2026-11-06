@@ -1,42 +1,20 @@
-#ifndef WEBSOCKET_CONTROL_SERVER_H
-#define WEBSOCKET_CONTROL_SERVER_H
+#ifndef _WEBSOCKET_CONTROL_SERVER_H_
+#define _WEBSOCKET_CONTROL_SERVER_H_
 
 #include <esp_http_server.h>
-#include <cJSON.h>
-#include <cstdint>
-#include <string>
-#include <map>
 
 class WebSocketControlServer {
 public:
     WebSocketControlServer();
     ~WebSocketControlServer();
 
+    // 统一使用 int 类型，避免签名不匹配
     bool Start(int port = 8080);
-    
-    void Stop();
-
-    size_t GetClientCount() const;
-
-    void BroadcastMessage(const std::string& message);
+    void SendMessage(int fd, const char *message);
 
 private:
-    struct ClientInfo {
-        uint64_t client_id;
-    };
-
-    httpd_handle_t server_handle_;
-    std::map<int, ClientInfo> clients_;
-    uint64_t next_client_id_ = 0;
-
-    static esp_err_t ws_handler(httpd_req_t *req);
-    
-    void HandleMessage(httpd_req_t *req, const char* data, size_t len);
-    void AddClient(httpd_req_t *req);
-    void RemoveClient(httpd_req_t *req);
-    uint64_t GetClientId(httpd_req_t *req) const;
-    void SendMessage(int sock_fd, uint64_t client_id, const std::string& message);
-    static WebSocketControlServer* instance_;
+    httpd_handle_t server_;
+    static esp_err_t WebSocketHandler(httpd_req_t *req);
 };
 
-#endif // WEBSOCKET_CONTROL_SERVER_H
+#endif // _WEBSOCKET_CONTROL_SERVER_H_
