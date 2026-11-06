@@ -31,9 +31,8 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            cd build
-            # 使用官方命令，自动读取 flash_args 合并，无需手动写地址和文件名
-            idf.py merge-bin -o otto-firmware-full.bin
+            # 关键修复：在项目根目录执行 merge-bin，输出到 build 文件夹
+            idf.py merge-bin -o build/otto-firmware-full.bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
