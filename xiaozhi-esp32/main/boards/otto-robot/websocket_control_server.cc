@@ -79,8 +79,6 @@ esp_err_t WebSocketControlServer::WebSocketHandler(httpd_req_t *req) {
             return ret;
         }
         ESP_LOGI(TAG, "Got message: %s", buf);
-        
-        // 在这里可以添加你的控制逻辑，例如解析 JSON 或者字符串命令
     }
     
     free(buf);
@@ -118,7 +116,7 @@ bool WebSocketControlServer::Start(int port) {
     httpd_uri_t ws_uri = {
         .uri = "/ws",
         .method = HTTP_GET,
-        .handler = WebSocketHandler, // 引用静态函数
+        .handler = WebSocketHandler,
         .user_ctx = NULL,
         .is_websocket = true
     };
