@@ -1,8 +1,9 @@
 #include "pca9685_servo.h"
+#include <math.h>
+#include "esp_check.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <math.h>
 
 static const char *TAG = "PCA9685";
 static i2c_master_bus_handle_t s_bus;
@@ -17,6 +18,7 @@ static esp_err_t write_reg(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = {reg, val};
     return i2c_master_transmit(s_dev, buf, 2, 100 / portTICK_PERIOD_MS);
 }
+
 static esp_err_t read_reg(uint8_t reg, uint8_t *val) {
     return i2c_master_transmit_receive(s_dev, &reg, 1, val, 1, 100 / portTICK_PERIOD_MS);
 }
@@ -39,25 +41,24 @@ esp_err_t pca9685_init(void) {
     };
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev), TAG, "add dev fail");
 
-    write_reg(MODE1, 0x10); // 软复位
+    write_reg(MODE1, 0x10);
     vTaskDelay(pdMS_TO_TICKS(5));
-    write_reg(MODE1, 0x00); // 唤醒
+    write_reg(MODE1, 0x00);
     vTaskDelay(pdMS_TO_TICKS(5));
-    write_reg(MODE2, 0x04); // 推挽输出
+    write_reg(MODE2, 0x04);
 
-    // 设置 50Hz 频率
     uint8_t prescale = (uint8_t)(roundf(25000000.0f / (4096.0f * 50.0f)) - 1.0f);
     uint8_t old_mode;
     read_reg(MODE1, &old_mode);
-    write_reg(MODE1, (old_mode & 0x7F) | 0x10); // Sleep
+    write_reg(MODE1, (old_mode & 0x7F) | 0x10);
     vTaskDelay(pdMS_TO_TICKS(2));
     write_reg(PRESCALE, prescale);
     write_reg(MODE1, old_mode);
     vTaskDelay(pdMS_TO_TICKS(5));
-    write_reg(MODE1, old_mode | 0x80); // Restart
+    write_reg(MODE1, old_mode | 0x80);
 
     pca9685_all_off();
-    ESP_LOGI(TAG, "PCA9685 Ready (SDA:%d SCL:%d)", PCA9685_I2C_SDA_PIN, PCA9685_I2C_SCL_PIN);
+    ESP_LOGI(TAG, "PCA9685 Ready");
     return ESP_OK;
 }
 
