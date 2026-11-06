@@ -9,7 +9,7 @@
 #define OTTO_VERSION_NO_CAMERA 2
 
 #ifndef OTTO_HARDWARE_VERSION
-#define OTTO_HARDWARE_VERSION OTTO_VERSION_AUTO
+#define OTTO_HARDWARE_VERSION OTTO_VERSION_NO_CAMERA // 强制使用无摄像头版本
 #endif
 
 enum OttoCameraType {
@@ -63,64 +63,55 @@ struct HardwareConfig {
 };
 
 constexpr HardwareConfig CAMERA_VERSION_CONFIG = {
-    // 摄像头版本保留原样，不修改
     .power_charge_detect_pin = GPIO_NUM_NC,
     .power_adc_unit = ADC_UNIT_1,
     .power_adc_channel = ADC_CHANNEL_1,
-
     .right_leg_pin = GPIO_NUM_43,
     .right_foot_pin = GPIO_NUM_44,
     .left_leg_pin = GPIO_NUM_5,
     .left_foot_pin = GPIO_NUM_6,
     .left_hand_pin = GPIO_NUM_4,
     .right_hand_pin = GPIO_NUM_7,
-
     .audio_input_sample_rate = 16000,
     .audio_output_sample_rate = 16000,
     .audio_use_simplex = false,
-
     .audio_i2s_gpio_ws = GPIO_NUM_40,
     .audio_i2s_gpio_bclk = GPIO_NUM_42,
     .audio_i2s_gpio_din = GPIO_NUM_41,
     .audio_i2s_gpio_dout = GPIO_NUM_39,
-
     .audio_i2s_mic_gpio_ws = GPIO_NUM_NC,
     .audio_i2s_mic_gpio_sck = GPIO_NUM_NC,
     .audio_i2s_mic_gpio_din = GPIO_NUM_NC,
     .audio_i2s_spk_gpio_dout = GPIO_NUM_NC,
     .audio_i2s_spk_gpio_bclk = GPIO_NUM_NC,
     .audio_i2s_spk_gpio_lrck = GPIO_NUM_NC,
-
     .display_backlight_pin = GPIO_NUM_38,
     .display_mosi_pin = GPIO_NUM_45,
     .display_clk_pin = GPIO_NUM_48,
     .display_dc_pin = GPIO_NUM_47,
     .display_rst_pin = GPIO_NUM_1,
     .display_cs_pin = GPIO_NUM_NC,
-
     .i2c_sda_pin = GPIO_NUM_15,
     .i2c_scl_pin = GPIO_NUM_16,
 };
 
 constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
-    // ================== 以下为你修改后的引脚 ==================
-    .power_charge_detect_pin = GPIO_NUM_21,
+    .power_charge_detect_pin = GPIO_NUM_NC, 
     .power_adc_unit = ADC_UNIT_2,
     .power_adc_channel = ADC_CHANNEL_3,
 
-    // 【废弃】原生舵机引脚。因为改用 PCA9685，这里赋安全值防报错，实际不再驱动
-    .right_leg_pin = GPIO_NUM_17,
-    .right_foot_pin = GPIO_NUM_18,
-    .left_leg_pin = GPIO_NUM_38,
-    .left_foot_pin = GPIO_NUM_39,
-    .left_hand_pin = GPIO_NUM_41,
-    .right_hand_pin = GPIO_NUM_42,
+    // 舵机引脚不再使用原生PWM，设为NC
+    .right_leg_pin = GPIO_NUM_NC,
+    .right_foot_pin = GPIO_NUM_NC,
+    .left_leg_pin = GPIO_NUM_NC,
+    .left_foot_pin = GPIO_NUM_NC,
+    .left_hand_pin = GPIO_NUM_NC,
+    .right_hand_pin = GPIO_NUM_NC,
 
     .audio_input_sample_rate = 16000,
-    .audio_output_sample_rate = 24000, // 如果想提高音质可改24000，需确认引擎支持
+    .audio_output_sample_rate = 24000,
     .audio_use_simplex = true,
 
-    // 全局 I2S（某些板子会用到，当前不用）
     .audio_i2s_gpio_ws = GPIO_NUM_NC,
     .audio_i2s_gpio_bclk = GPIO_NUM_NC,
     .audio_i2s_gpio_din = GPIO_NUM_NC,
@@ -148,7 +139,6 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .i2c_scl_pin = GPIO_NUM_9,
 };
 
-// 以下宏定义保持不变
 #define CAMERA_XCLK (GPIO_NUM_3)
 #define CAMERA_PCLK (GPIO_NUM_10)
 #define CAMERA_VSYNC (GPIO_NUM_17)
