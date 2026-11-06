@@ -1,6 +1,22 @@
+# ==========================================
+# Otto Robot 专属配置
+# ==========================================
 CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 # CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
+
+# WebSocket 与自定义唤醒词
 CONFIG_HTTPD_WS_SUPPORT=y
 CONFIG_USE_CUSTOM_WAKE_WORD=y
 CONFIG_CUSTOM_WAKE_WORD="你好小智"
 CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+
+# ==========================================
+# Flash 容量与 16MB 分区表配置 (解决固件过大报错)
+# ==========================================
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# 强制使用 16MB 的 v2 分区表
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
