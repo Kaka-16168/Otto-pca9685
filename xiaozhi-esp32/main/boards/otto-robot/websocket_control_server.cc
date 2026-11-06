@@ -7,6 +7,17 @@
 #include <cstdlib>
 #include <map>
 
+// =========================================================
+// 【修复 1】兼容 ESP-IDF v6.0 的枚举定义缺失问题
+// 如果编译器找不到这个宏，我们手动定义它的值 (0x1 为 TEXT, 0x8 为 CLOSE)
+// =========================================================
+#ifndef HTTPD_WS_TYPE_TEXT
+#define HTTPD_WS_TYPE_TEXT 0x1
+#endif
+#ifndef HTTPD_WS_TYPE_CLOSE
+#define HTTPD_WS_TYPE_CLOSE 0x8
+#endif
+
 static const char* TAG = "WSControl";
 
 WebSocketControlServer* WebSocketControlServer::instance_ = nullptr;
@@ -34,7 +45,7 @@ esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
     httpd_ws_frame_t ws_pkt;
     uint8_t *buf = NULL;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    ws_pkt.type = (httpd_ws_type_t)HTTPD_WS_TYPE_TEXT;
     
     /* Set max_len = 0 to get the frame len */
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
@@ -64,14 +75,14 @@ esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
     
     ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
     
-    if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
+    if (ws_pkt.type == (httpd_ws_type_t)HTTPD_WS_TYPE_CLOSE) {
         ESP_LOGI(TAG, "WebSocket close frame received");
         instance_->RemoveClient(req);
         free(buf);
         return ESP_OK;
     }
     
-    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
+    if (ws_pkt.type == (httpd_ws_type_t)HTTPD_WS_TYPE_TEXT) {
         if (ws_pkt.len > 0 && buf != nullptr) {
             buf[ws_pkt.len] = '\0';
             instance_->HandleMessage(req, (const char*)buf, ws_pkt.len);
@@ -228,11 +239,14 @@ static void ws_broadcast_send_job(void* arg) {
     WsBroadcastJob* job = static_cast<WsBroadcastJob*>(arg);
 
     httpd_ws_frame_t ws_pkt = {};
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    ws_pkt.type = (httpd_ws_type_t)HTTPD_WS_TYPE_TEXT;
     ws_pkt.payload = reinterpret_cast<uint8_t*>(job->payload);
     ws_pkt.len = job->len;
     ws_pkt.final = true;
 
+    // =========================================================
+    // 【修复 2】修正手误：原来是 httdp_ws_send_frame_async，多了一个 d
+    // =========================================================
     esp_err_t ret = httpd_ws_send_frame_async(job->server, job->fd, &ws_pkt);
     if (ret != ESP_OK) {
         ESP_LOGE("WSControl", "BroadcastMessage: send failed fd=%d err=%d", job->fd, ret);
