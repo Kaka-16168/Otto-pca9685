@@ -32,14 +32,8 @@ jobs:
             idf.py fullclean
             idf.py build
             cd build
-            # 使用 esptool 手动合并，路径清晰明确
-            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
-              --flash_mode dio --flash_freq 80m --flash_size 16MB \
-              0x0 bootloader/bootloader.bin \
-              0x8000 partition_table/partition-table.bin \
-              0xd000 ota_data_initial.bin \
-              0x20000 xiaozhi.bin \
-              0x600000 generated_assets.bin
+            # 使用官方命令，自动读取 flash_args 合并，无需手动写地址和文件名
+            idf.py merge-bin -o otto-firmware-full.bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
