@@ -8,8 +8,9 @@
 #define OTTO_VERSION_CAMERA 1
 #define OTTO_VERSION_NO_CAMERA 2
 
+// 强制使用无摄像头版本
 #ifndef OTTO_HARDWARE_VERSION
-#define OTTO_HARDWARE_VERSION OTTO_VERSION_NO_CAMERA // 强制使用无摄像头版本
+#define OTTO_HARDWARE_VERSION OTTO_VERSION_NO_CAMERA 
 #endif
 
 enum OttoCameraType {
@@ -100,7 +101,7 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .power_adc_unit = ADC_UNIT_2,
     .power_adc_channel = ADC_CHANNEL_3,
 
-    // 舵机引脚不再使用原生PWM，设为NC
+    // 原生舵机引脚置为 NC（因为我们用 PCA9685）
     .right_leg_pin = GPIO_NUM_NC,
     .right_foot_pin = GPIO_NUM_NC,
     .left_leg_pin = GPIO_NUM_NC,
@@ -138,24 +139,6 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .i2c_sda_pin = GPIO_NUM_8,
     .i2c_scl_pin = GPIO_NUM_9,
 };
-
-#define CAMERA_XCLK (GPIO_NUM_3)
-#define CAMERA_PCLK (GPIO_NUM_10)
-#define CAMERA_VSYNC (GPIO_NUM_17)
-#define CAMERA_HSYNC (GPIO_NUM_18)
-#define CAMERA_D0 (GPIO_NUM_12)
-#define CAMERA_D1 (GPIO_NUM_14)
-#define CAMERA_D2 (GPIO_NUM_21)
-#define CAMERA_D3 (GPIO_NUM_13)
-#define CAMERA_D4 (GPIO_NUM_11)
-#define CAMERA_D5 (GPIO_NUM_9)
-#define CAMERA_D6 (GPIO_NUM_46)
-#define CAMERA_D7 (GPIO_NUM_8)
-#define CAMERA_PWDN (GPIO_NUM_NC)
-#define CAMERA_RESET (GPIO_NUM_NC)
-#define CAMERA_XCLK_FREQ (16000000)
-#define LEDC_TIMER (LEDC_TIMER_0)
-#define LEDC_CHANNEL (LEDC_CHANNEL_0)
 
 #define LCD_TYPE_ST7789_SERIAL
 #define DISPLAY_WIDTH 240
