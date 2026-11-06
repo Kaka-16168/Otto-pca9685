@@ -8,7 +8,6 @@ public:
     WebSocketControlServer();
     ~WebSocketControlServer();
 
-    // 统一使用 int 类型，避免签名不匹配
     bool Start(int port = 8080);
     void SendMessage(int fd, const char *message);
 
