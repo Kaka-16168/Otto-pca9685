@@ -22,7 +22,6 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 0
 
-      # 核心修改：将编译与合并固件放在同一个 esp-idf-ci-action 步骤内完成
       - name: Build and Merge Firmware
         uses: espressif/esp-idf-ci-action@v1.1.0
         with:
@@ -32,7 +31,8 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            idf.py merge-bin -o build/otto-firmware-full.bin
+            cd build
+            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
         env:
           BOARD_TYPE: otto-robot
 
