@@ -1,6 +1,6 @@
 #include "otto_pca_adapter.h"
+#include "esp_log.h"
 
-// 舵机 ID 映射到 PCA9685 的通道 (0~5)
 static const uint8_t s_channel_map[6] = { 0, 1, 2, 3, 4, 5 };
 
 void otto_pca_init(void) {
