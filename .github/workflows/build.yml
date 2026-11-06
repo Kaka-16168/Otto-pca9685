@@ -3,8 +3,6 @@ name: Build Otto Firmware
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -31,7 +29,6 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            # 关键修复：在项目根目录执行 merge-bin，输出到 build 文件夹
             idf.py merge-bin -o build/otto-firmware-full.bin
 
       - name: Upload Firmware Artifact
