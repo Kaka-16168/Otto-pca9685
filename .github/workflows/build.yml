@@ -3,8 +3,6 @@ name: Build Otto Firmware
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -31,9 +29,15 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            # 进入 build 目录，直接读取 flash_args 配置并生成合并固件
             cd build
-            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
+            # 手动合并所有组件，包括 assets 分区
+            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+              --flash_mode dio --flash_freq 80m --flash_size 16MB \
+              0x0 bootloader/bootloader.bin \
+              0x8000 partition_table/partition-table.bin \
+              0xd000 ota_data_initial.bin \
+              0x20000 xiaozhi.bin \
+              0x810000 generated_assets.bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
