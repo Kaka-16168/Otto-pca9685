@@ -5,11 +5,39 @@
 #include <esp_http_server.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-
-// 注意：如果你的工程需要控制 Otto，请保留原有的 Otto 头文件引用
-// #include "otto_controller.h" 
+#include <stdlib.h>
 
 #define TAG "WebSocketControl"
+
+// 异步发送任务的数据结构
+struct async_send_job {
+    httpd_handle_t server;
+    int fd;
+    char *data;
+    size_t len;
+};
+
+// 异步发送任务
+static void async_send_task(void *arg) {
+    async_send_job *job = (async_send_job *)arg;
+    
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.payload = (uint8_t *)job->data;
+    ws_pkt.len = job->len;
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    
+    // 发送 WebSocket 帧
+    esp_err_t ret = httpd_ws_send_frame_async(job->server, job->fd, &ws_pkt);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send frame: %d", ret);
+    }
+    
+    // 清理内存
+    free(job->data);
+    free(job);
+    vTaskDelete(NULL);
+}
 
 WebSocketControlServer::WebSocketControlServer() : server_(nullptr) {}
 
@@ -22,7 +50,7 @@ WebSocketControlServer::~WebSocketControlServer() {
 // WebSocket 接收消息的处理函数
 esp_err_t WebSocketControlServer::WebSocketHandler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
-        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        ESP_LOGI(TAG, "Handshake done, new connection opened");
         return ESP_OK;
     }
 
@@ -34,67 +62,34 @@ esp_err_t WebSocketControlServer::WebSocketHandler(httpd_req_t *req) {
     // 获取帧长度
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
+        ESP_LOGE(TAG, "recv_frame failed to get frame len: %d", ret);
         return ret;
     }
 
     if (ws_pkt.len) {
         buf = (uint8_t *)calloc(1, ws_pkt.len + 1);
         if (buf == NULL) {
-            ESP_LOGE(TAG, "Failed to calloc memory for buf");
             return ESP_ERR_NO_MEM;
         }
         ws_pkt.payload = buf;
         ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
+            ESP_LOGE(TAG, "recv_frame failed: %d", ret);
             free(buf);
             return ret;
         }
         ESP_LOGI(TAG, "Got message: %s", buf);
         
-        // 在这里处理你的控制逻辑，例如：
-        // ParseCommand((char*)buf);
+        // 在这里可以添加你的控制逻辑，例如解析 JSON 或者字符串命令
     }
     
     free(buf);
     return ESP_OK;
 }
 
-// 异步发送任务的参数结构
-struct async_send_job {
-    httpd_handle_t server;
-    int fd;
-    char *data;
-    size_t len;
-};
-
-// 异步发送任务
-static void async_send_task(void *arg) {
-    async_send_job *job = (async_send_job *)arg;
-    
-    // 修复点：正确定义 httpd_ws_frame_t 并初始化
-    httpd_ws_frame_t ws_pkt;
-    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.payload = (uint8_t *)job->data;
-    ws_pkt.len = job->len;
-    // 修复点：使用正确的枚举值 HTTPD_WS_TYPE_TEXT
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    
-    // 修复点：确保包含 <esp_http_server.h> 后调用此函数
-    esp_err_t ret = httpd_ws_send_frame_async(job->server, job->fd, &ws_pkt);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to send frame: %d", ret);
-    }
-    
-    free(job->data);
-    free(job);
-    vTaskDelete(NULL);
-}
-
-// 发送消息接口
+// 发送消息的具体实现
 void WebSocketControlServer::SendMessage(int fd, const char *message) {
-    if (!server_) return;
+    if (!server_ || !message) return;
     
     async_send_job *job = (async_send_job *)malloc(sizeof(async_send_job));
     if (!job) return;
@@ -104,10 +99,17 @@ void WebSocketControlServer::SendMessage(int fd, const char *message) {
     job->len = strlen(message);
     job->data = strdup(message);
     
+    if (!job->data) {
+        free(job);
+        return;
+    }
+    
+    // 创建任务进行异步发送，避免阻塞当前流程
     xTaskCreate(async_send_task, "ws_send_task", 4096, job, 5, NULL);
 }
 
-bool WebSocketControlServer::Start(uint16_t port) {
+// 启动服务器
+bool WebSocketControlServer::Start(int port) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = port;
     config.ctrl_port = port + 1; 
@@ -116,25 +118,7 @@ bool WebSocketControlServer::Start(uint16_t port) {
     httpd_uri_t ws_uri = {
         .uri = "/ws",
         .method = HTTP_GET,
-        .handler = [](httpd_req_t *req) -> esp_err_t {
-            // C 语言回调需要静态函数或无捕获的 lambda
-            if (req->method == HTTP_GET) {
-                return ESP_OK;
-            }
-            // 简化的接收逻辑
-            httpd_ws_frame_t ws_pkt;
-            memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-            ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-            esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
-            if (ret == ESP_OK && ws_pkt.len) {
-                uint8_t *buf = (uint8_t *)calloc(1, ws_pkt.len + 1);
-                ws_pkt.payload = buf;
-                httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
-                ESP_LOGI(TAG, "RX: %s", buf);
-                free(buf);
-            }
-            return ESP_OK;
-        },
+        .handler = WebSocketHandler, // 引用静态函数
         .user_ctx = NULL,
         .is_websocket = true
     };
