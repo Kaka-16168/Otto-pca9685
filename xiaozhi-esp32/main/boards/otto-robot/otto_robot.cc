@@ -29,7 +29,6 @@ extern "C" {
 }
 
 #define TAG "OttoRobot"
-
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
 class OttoRobot : public WifiBoard {
@@ -41,10 +40,19 @@ private:
     HardwareConfig hw_config_;
     AudioCodec* audio_codec_;
     Camera* camera_; 
+    bool has_battery_;
 
     void InitializePowerManager() {
-        power_manager_ = new PowerManager(hw_config_.power_charge_detect_pin,
-                                          hw_config_.power_adc_unit, hw_config_.power_adc_channel);
+        // 如果你完全没有接任何电池和分压电阻，将 has_battery_ 设为 false
+        // 这样系统就会屏蔽低电量弹窗，直接当作 USB 供电设备使用
+        has_battery_ = false; 
+
+        if (has_battery_) {
+            power_manager_ = new PowerManager(hw_config_.power_charge_detect_pin,
+                                              hw_config_.power_adc_unit, hw_config_.power_adc_channel);
+        } else {
+            power_manager_ = nullptr;
+        }
     }
 
     void InitializeSpi() {
@@ -101,7 +109,6 @@ private:
     }
 
     void InitializeOttoController() { 
-        // 强制初始化 PCA9685
         otto_pca_init(); 
         ::InitializeOttoController(hw_config_); 
     }
@@ -145,7 +152,6 @@ public:
           audio_codec_(nullptr),
           camera_(nullptr) {
         
-        // 强制使用非摄像头配置
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
 
         InitializeSpi();
@@ -170,7 +176,14 @@ public:
         return backlight;
     }
 
+    // 【关键修改】彻底关闭未接电池时的低电量弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
+        if (!has_battery_ || power_manager_ == nullptr) {
+            // 返回 false 表示没有电池信息，小智主程序就不会弹出低电量警告了
+            return false; 
+        }
+        
+        // 如果以后你接好了电池，把上面的 has_battery_ 改为 true，就会走这里的真实检测逻辑
         charging = power_manager_->IsCharging();
         discharging = !charging;
         level = power_manager_->GetBatteryLevel();
