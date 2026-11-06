@@ -22,7 +22,8 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 0
 
-      - name: Build with ESP-IDF
+      # 核心修改：将编译与合并固件放在同一个 esp-idf-ci-action 步骤内完成
+      - name: Build and Merge Firmware
         uses: espressif/esp-idf-ci-action@v1.1.0
         with:
           esp_idf_version: v6.0.2
@@ -31,14 +32,9 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
+            idf.py merge-bin -o build/otto-firmware-full.bin
         env:
           BOARD_TYPE: otto-robot
-
-      - name: Merge Firmware
-        run: |
-          cd xiaozhi-esp32
-          # 使用 idf.py merge-bin 命令，ESP-IDF v6 原生支持，无需手动指定 esptool 路径
-          idf.py merge-bin -o build/otto-firmware-full.bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
