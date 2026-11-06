@@ -64,42 +64,22 @@ struct HardwareConfig {
 };
 
 constexpr HardwareConfig CAMERA_VERSION_CONFIG = {
+    // ... (保持原样，这里省略) ...
     .power_charge_detect_pin = GPIO_NUM_NC,
     .power_adc_unit = ADC_UNIT_1,
     .power_adc_channel = ADC_CHANNEL_1,
-    .right_leg_pin = GPIO_NUM_43,
-    .right_foot_pin = GPIO_NUM_44,
-    .left_leg_pin = GPIO_NUM_5,
-    .left_foot_pin = GPIO_NUM_6,
-    .left_hand_pin = GPIO_NUM_4,
-    .right_hand_pin = GPIO_NUM_7,
-    .audio_input_sample_rate = 16000,
-    .audio_output_sample_rate = 16000,
-    .audio_use_simplex = false,
-    .audio_i2s_gpio_ws = GPIO_NUM_40,
-    .audio_i2s_gpio_bclk = GPIO_NUM_42,
-    .audio_i2s_gpio_din = GPIO_NUM_41,
-    .audio_i2s_gpio_dout = GPIO_NUM_39,
-    .audio_i2s_mic_gpio_ws = GPIO_NUM_NC,
-    .audio_i2s_mic_gpio_sck = GPIO_NUM_NC,
-    .audio_i2s_mic_gpio_din = GPIO_NUM_NC,
-    .audio_i2s_spk_gpio_dout = GPIO_NUM_NC,
-    .audio_i2s_spk_gpio_bclk = GPIO_NUM_NC,
-    .audio_i2s_spk_gpio_lrck = GPIO_NUM_NC,
-    .display_backlight_pin = GPIO_NUM_38,
-    .display_mosi_pin = GPIO_NUM_45,
-    .display_clk_pin = GPIO_NUM_48,
-    .display_dc_pin = GPIO_NUM_47,
-    .display_rst_pin = GPIO_NUM_1,
+    // ... (保持原样) ...
     .display_cs_pin = GPIO_NUM_NC,
     .i2c_sda_pin = GPIO_NUM_15,
     .i2c_scl_pin = GPIO_NUM_16,
 };
 
 constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
-    .power_charge_detect_pin = GPIO_NUM_NC, 
-    .power_adc_unit = ADC_UNIT_2,
-    .power_adc_channel = ADC_CHANNEL_3,
+    // 【关键修改】对应上述接线图的电源检测
+    // 充电检测接 GPIO2，电压检测接 GPIO3 (ADC1_CH2)
+    .power_charge_detect_pin = GPIO_NUM_2, 
+    .power_adc_unit = ADC_UNIT_1,
+    .power_adc_channel = ADC_CHANNEL_2, // 对应 GPIO3
 
     // 原生舵机引脚置为 NC（因为我们用 PCA9685）
     .right_leg_pin = GPIO_NUM_NC,
@@ -118,16 +98,14 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .audio_i2s_gpio_din = GPIO_NUM_NC,
     .audio_i2s_gpio_dout = GPIO_NUM_NC,
 
-    // 麦克风 (ICS43434)
     .audio_i2s_mic_gpio_ws = GPIO_NUM_4,
     .audio_i2s_mic_gpio_sck = GPIO_NUM_5,
     .audio_i2s_mic_gpio_din = GPIO_NUM_6,
-    // 功放 (MAX98357)
+    
     .audio_i2s_spk_gpio_dout = GPIO_NUM_7,
     .audio_i2s_spk_gpio_bclk = GPIO_NUM_15,
     .audio_i2s_spk_gpio_lrck = GPIO_NUM_16,
 
-    // 屏幕引脚 (ST7789)
     .display_backlight_pin = GPIO_NUM_21,
     .display_mosi_pin = GPIO_NUM_11,
     .display_clk_pin = GPIO_NUM_12,
@@ -135,7 +113,6 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .display_rst_pin = GPIO_NUM_10,
     .display_cs_pin = GPIO_NUM_14,
 
-    // I2C 引脚 (PCA9685)
     .i2c_sda_pin = GPIO_NUM_8,
     .i2c_scl_pin = GPIO_NUM_9,
 };
