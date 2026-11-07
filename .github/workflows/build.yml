@@ -30,6 +30,7 @@ jobs:
             idf.py fullclean
             idf.py build
             cd build
+            # 放弃手动写地址，强制使用 @flash_args 自动合并
             esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
       - name: Upload Firmware Artifact
