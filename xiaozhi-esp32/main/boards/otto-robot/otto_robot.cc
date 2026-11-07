@@ -28,9 +28,6 @@ extern "C" {
 #include "otto_pca_adapter.h"
 }
 
-// 声明外部引用，以便调用原版的动作接口
-extern Otto otto;
-
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
@@ -103,11 +100,15 @@ private:
 
     void InitializeOttoController() { 
         otto_pca_init(); 
-        ::InitializeOttoController(hw_config_); 
         
-        // 【新增】强制开机归位动作，测试舵机
-        ESP_LOGI(TAG, "强制开机归位，测试舵机...");
-        otto.Home(true); 
+        // 【核心修复】开机直接发送 90 度 PWM 信号，测试 PCA9685 和舵机供电
+        ESP_LOGI(TAG, "开机测试：强制舵机归位 90 度...");
+        for (int i = 0; i < 6; i++) {
+            otto_pca_set_servo_angle(i, 90);
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 等待舵机转到位
+
+        ::InitializeOttoController(hw_config_); 
     }
 
 public:
