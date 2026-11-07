@@ -1,26 +1,17 @@
 CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 # CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
 
-# 开启 WebSocket
 CONFIG_HTTPD_WS_SUPPORT=y
 
-# ==========================================
-# 【语音唤醒终极修复】
-# ==========================================
-# 必须关闭 AFE（默认的 WakeNet 唤醒），否则会与自定义唤醒冲突导致崩溃
+# 【语音唤醒修复】关闭 AFE，强启自定义多命令词
 # CONFIG_USE_AFE_WAKE_WORD is not set
-# 强制开启自定义多命令词唤醒
 CONFIG_USE_CUSTOM_WAKE_WORD=y
 CONFIG_CUSTOM_WAKE_WORD="ni hao xiao zhi"
 CONFIG_SR_MN_CN_MULTINET7_QUANT=y
 
-# ==========================================
-# 【屏幕字体终极修复】
-# ==========================================
-# 强制使用内置的常用中文字库
+# 【屏幕字体修复】强制打包内置字库
 CONFIG_USE_DEFAULT_ASSETS=y
 CONFIG_FLASH_DEFAULT_ASSETS=y
-# 强制打包字体到 assets 资源包
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
@@ -29,9 +20,7 @@ CONFIG_LV_FONT_MONTSERRAT_24=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
 CONFIG_LV_FONT_MONTSERRAT_32=y
 
-# ==========================================
 # 16MB 分区与 Flash 配置
-# ==========================================
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
