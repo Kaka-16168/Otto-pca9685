@@ -162,8 +162,8 @@ public:
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
-            cJSON_ReplaceItemInObject(root, "chip_name", cJSON_CreateString("ESP32-S3-N16R8"));
-            cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3-N16R8"));
+            cJSON_ReplaceItemInObject(root, "chip_name", cJSON_CreateString("ESP32-S3"));
+            cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3"));
             
             cJSON_ReplaceItemInObject(root, "screen_type", cJSON_CreateString("ST7789"));
             cJSON_ReplaceItemInObject(root, "screen_model", cJSON_CreateString("ST7789 240x240"));
