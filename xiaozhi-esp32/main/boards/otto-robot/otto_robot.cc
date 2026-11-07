@@ -130,6 +130,11 @@ public:
         InitializeOttoController();
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
+
+        // 关闭低电量弹窗
+        if (display_ != nullptr) {
+            display_->SetLowBatteryPopupEnabled(false);
+        }
     }
 
     virtual AudioCodec* GetAudioCodec() override { return audio_codec_; }
@@ -151,6 +156,28 @@ public:
     }
 
     virtual Camera* GetCamera() override { return nullptr; }
+
+    // 重写此方法，让 MCP 工具返回正确的硬件信息
+    virtual std::string GetDeviceStatusJson() override {
+        // 调用父类方法获取基础状态
+        std::string baseJson = WifiBoard::GetDeviceStatusJson();
+        
+        // 解析 baseJson 并添加/覆盖正确的硬件信息
+        cJSON* root = cJSON_Parse(baseJson.c_str());
+        if (root != nullptr) {
+            // 设置正确的芯片型号
+            cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3-N16R8"));
+            // 设置正确的屏幕型号
+            cJSON_ReplaceItemInObject(root, "screen_model", cJSON_CreateString("ST7789 240x240"));
+            
+            char* newJson = cJSON_PrintUnformatted(root);
+            std::string result(newJson);
+            cJSON_free(newJson);
+            cJSON_Delete(root);
+            return result;
+        }
+        return baseJson;
+    }
 };
 
 DECLARE_BOARD(OttoRobot);
