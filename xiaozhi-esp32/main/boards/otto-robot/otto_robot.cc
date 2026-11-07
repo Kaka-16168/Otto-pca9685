@@ -7,7 +7,6 @@
 #include <esp_log.h>
 #include <esp_rom_sys.h>
 #include <new>
-
 #include <cJSON.h>
 
 #include "application.h"
@@ -100,17 +99,13 @@ private:
     }
 
     void InitializeOttoController() { 
-        otto_pca_init(); // 先初始化 I2C 总线
-        ::InitializeOttoController(hw_config_); // 再启动动作引擎
+        otto_pca_init(); 
+        ::InitializeOttoController(hw_config_); 
     }
 
 public:
-    OttoRobot()
-        : boot_button_(BOOT_BUTTON_GPIO),
-          audio_codec_(nullptr) {
-        
+    OttoRobot() : boot_button_(BOOT_BUTTON_GPIO), audio_codec_(nullptr) {
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
-
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeButtons();
@@ -155,7 +150,6 @@ public:
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 强制修改返回的芯片和屏幕信息
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
