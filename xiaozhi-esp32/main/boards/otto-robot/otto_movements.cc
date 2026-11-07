@@ -18,7 +18,7 @@ static const char* TAG = "OttoMovements";
 
 #define HAND_HOME_POSITION 45
 
-// 用于记录当前真实角度的缓存，方便部分逻辑读取
+// 记录当前真实角度，确保动作连贯
 static int s_current_pos[SERVO_COUNT] = {90, 90, 90, 90, HAND_HOME_POSITION, 180 - HAND_HOME_POSITION};
 
 namespace {
@@ -31,7 +31,6 @@ float EaseOutCubic(float t) {
 Otto::Otto() {
     is_otto_resting_ = false;
     has_hands_ = false;
-    // 初始化所有舵机管脚为-1（未连接）
     for (int i = 0; i < SERVO_COUNT; i++) {
         servo_pins_[i] = -1;
         servo_trim_[i] = 0;
@@ -49,16 +48,12 @@ unsigned long IRAM_ATTR millis() {
 void Otto::Init(int left_leg, int right_leg, int left_foot, int right_foot, int left_hand,
                 int right_hand) {
     // =========================================================
-    // 【核心修复】不管 config.h 传进来什么（哪怕是 -1），
-    // 强制将其覆盖为有效的虚拟值，确保后续的 if (servo_pins_[i] != -1) 全部成立，
-    // 从而彻底激活 PCA9685 的所有舵机控制通道（包含手部）。
+    // 【核心修复】强制覆盖引脚检测，无论传入什么，直接激活 6 路舵机
     // =========================================================
     for (int i = 0; i < SERVO_COUNT; i++) {
         servo_pins_[i] = i; 
     }
-
-    // 强制开启手部动作功能
-    has_hands_ = true;
+    has_hands_ = true; // 强制启用手部动作
 
     AttachServos();
     is_otto_resting_ = false;
@@ -68,17 +63,14 @@ void Otto::Init(int left_leg, int right_leg, int left_foot, int right_foot, int 
 //-- ATTACH & DETACH FUNCTIONS ----------------------------------//
 ///////////////////////////////////////////////////////////////////
 void Otto::AttachServos() {
-    // =========================================================
-    // 不再调用原生 ESP32 的 ledc 初始化。
-    // 仅初始化数学计算器的初始位置，硬件已由 PCA9685 接管。
-    // =========================================================
+    // 初始化底层数学库的起始位置，不占用原生 LEDC
     for (int i = 0; i < SERVO_COUNT; i++) {
         servo_[i].SetPosition(s_current_pos[i]);
     }
 }
 
 void Otto::DetachServos() {
-    // 断开所有舵机信号（让舵机失去动力）
+    // 断开所有舵机信号
     pca9685_all_off();
 }
 
@@ -192,6 +184,7 @@ void Otto::OscillateServos(int amplitude[SERVO_COUNT], int offset[SERVO_COUNT], 
                 servo_[i].Refresh();
                 int pos = servo_[i].GetPosition();
                 s_current_pos[i] = pos;
+                // 将实时计算出的角度推送至 PCA9685
                 otto_pca_set_servo_angle(i, pos);
             }
         }
@@ -224,7 +217,6 @@ void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], i
         SetRestState(false);
     }
 
-    // 将绝对角度转换为offset（offset = center_angle - 90）
     int offset[SERVO_COUNT];
     for (int i = 0; i < SERVO_COUNT; i++) {
         offset[i] = center_angle[i] - 90;
@@ -232,12 +224,10 @@ void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], i
 
     int cycles = (int)steps;
 
-    //-- Execute complete cycles
     if (cycles >= 1)
         for (int i = 0; i < cycles; i++)
             OscillateServos(amplitude, offset, period, phase_diff);
 
-    //-- Execute the final not complete cycle
     OscillateServos(amplitude, offset, period, phase_diff, (float)steps - cycles);
     vTaskDelay(pdMS_TO_TICKS(10));
 }
@@ -246,7 +236,7 @@ void Otto::Execute2(int amplitude[SERVO_COUNT], int center_angle[SERVO_COUNT], i
 //-- HOME = Otto at rest position -------------------------------//
 ///////////////////////////////////////////////////////////////////
 void Otto::Home(bool hands_down) {
-    if (is_otto_resting_ == false) {  // Go to rest position only if necessary
+    if (is_otto_resting_ == false) {  
         int homes[SERVO_COUNT];
         int max_delta = 0;
         for (int i = 0; i < SERVO_COUNT; i++) {
@@ -273,7 +263,6 @@ void Otto::Home(bool hands_down) {
         MoveServos(home_time, homes);
         is_otto_resting_ = true;
     }
-
     vTaskDelay(pdMS_TO_TICKS(200));
 }
 
