@@ -140,7 +140,7 @@ public:
         return backlight;
     }
 
-    // 强制返回满电，彻底解决低电量弹窗
+    // 强制满电，解决弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100;
         charging = true;
