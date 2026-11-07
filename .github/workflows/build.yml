@@ -30,7 +30,7 @@ jobs:
             idf.py fullclean
             idf.py build
             cd build
-            # 关键：使用 @flash_args 自动合并代码、唤醒词资源包、字体
+            # 自动读取 flash_args 并合并所有组件，解决找不到 xiaozhi.bin 的问题
             esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
       - name: Upload Firmware Artifact
