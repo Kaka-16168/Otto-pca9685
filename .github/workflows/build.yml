@@ -29,7 +29,6 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            # 进入 build 目录，直接读取 flash_args 进行合并
             cd build
             esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
