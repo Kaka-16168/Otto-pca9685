@@ -101,12 +101,12 @@ private:
     void InitializeOttoController() { 
         otto_pca_init(); 
         
-        // 【核心修复】开机直接发送 90 度 PWM 信号，测试 PCA9685 和舵机供电
+        // 开机强制所有舵机回中，测试供电
         ESP_LOGI(TAG, "开机测试：强制舵机归位 90 度...");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
         }
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 等待舵机转到位
+        vTaskDelay(pdMS_TO_TICKS(1000)); 
 
         ::InitializeOttoController(hw_config_); 
     }
@@ -157,14 +157,26 @@ public:
 
     virtual Camera* GetCamera() override { return nullptr; }
 
+    // 【彻底修复】补全所有设备信息字段，解决后台 Unknown 报错
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
+            cJSON_ReplaceItemInObject(root, "chip_name", cJSON_CreateString("ESP32-S3-N16R8"));
             cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3-N16R8"));
+            
+            cJSON_ReplaceItemInObject(root, "screen_type", cJSON_CreateString("ST7789"));
             cJSON_ReplaceItemInObject(root, "screen_model", cJSON_CreateString("ST7789 240x240"));
+            cJSON_ReplaceItemInObject(root, "screen_width", cJSON_CreateNumber(240));
+            cJSON_ReplaceItemInObject(root, "screen_height", cJSON_CreateNumber(240));
+            cJSON_ReplaceItemInObject(root, "screen_resolution", cJSON_CreateString("240x240"));
+            
+            cJSON_ReplaceItemInObject(root, "flash_size", cJSON_CreateString("16MB"));
+            cJSON_ReplaceItemInObject(root, "flash_model", cJSON_CreateString("16MB"));
+            
             cJSON_ReplaceItemInObject(root, "battery_level", cJSON_CreateNumber(100));
             cJSON_ReplaceItemInObject(root, "is_charging", cJSON_CreateBool(true));
+            
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
