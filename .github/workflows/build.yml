@@ -30,7 +30,6 @@ jobs:
             idf.py fullclean
             idf.py build
             cd build
-            # 通过 @flash_args 合并，保证 xiaozhi.bin 和 assets.bin 都在里面
             esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
       - name: Upload Firmware Artifact
