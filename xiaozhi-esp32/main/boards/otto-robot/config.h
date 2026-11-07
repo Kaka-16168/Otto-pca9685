@@ -63,7 +63,7 @@ struct HardwareConfig {
 };
 
 constexpr HardwareConfig CAMERA_VERSION_CONFIG = {
-    // 省略无关配置...
+    // 保持原有摄像头配置不变
     .power_charge_detect_pin = GPIO_NUM_NC,
     .power_adc_unit = ADC_UNIT_1,
     .power_adc_channel = ADC_CHANNEL_1,
@@ -87,13 +87,13 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .power_adc_unit = ADC_UNIT_2,
     .power_adc_channel = ADC_CHANNEL_3,
 
-    // 【核心修复】分配虚拟引脚（1~6），防止控制器检测到 -1 而罢工
-    .right_leg_pin = GPIO_NUM_1,
-    .right_foot_pin = GPIO_NUM_2,
-    .left_leg_pin = GPIO_NUM_3,
-    .left_foot_pin = GPIO_NUM_4,
-    .left_hand_pin = GPIO_NUM_5,
-    .right_hand_pin = GPIO_NUM_6,
+    // 【按图修复】严格配置为 0~5，对应你的 PCA9685 通道
+    .right_leg_pin = (gpio_num_t)1,  // 右腿
+    .right_foot_pin = (gpio_num_t)3, // 右脚
+    .left_leg_pin = (gpio_num_t)0,   // 左腿
+    .left_foot_pin = (gpio_num_t)2,  // 左脚
+    .left_hand_pin = (gpio_num_t)4,  // 左手
+    .right_hand_pin = (gpio_num_t)5, // 右手
 
     .audio_input_sample_rate = 16000,
     .audio_output_sample_rate = 24000,
