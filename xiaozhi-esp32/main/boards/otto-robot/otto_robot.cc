@@ -28,6 +28,9 @@ extern "C" {
 #include "otto_pca_adapter.h"
 }
 
+// 声明外部引用，以便调用原版的动作接口
+extern Otto otto;
+
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
@@ -101,6 +104,10 @@ private:
     void InitializeOttoController() { 
         otto_pca_init(); 
         ::InitializeOttoController(hw_config_); 
+        
+        // 【新增】强制开机归位动作，测试舵机
+        ESP_LOGI(TAG, "强制开机归位，测试舵机...");
+        otto.Home(true); 
     }
 
 public:
@@ -140,7 +147,6 @@ public:
         return backlight;
     }
 
-    // 强制满电，解决弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100;
         charging = true;
