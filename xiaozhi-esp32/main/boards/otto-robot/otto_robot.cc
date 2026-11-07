@@ -8,7 +8,6 @@
 #include <esp_rom_sys.h>
 #include <new>
 
-// 引入 cJSON，用于修改设备状态信息
 #include <cJSON.h>
 
 #include "application.h"
@@ -101,8 +100,8 @@ private:
     }
 
     void InitializeOttoController() { 
-        otto_pca_init(); 
-        ::InitializeOttoController(hw_config_); 
+        otto_pca_init(); // 先初始化 I2C 总线
+        ::InitializeOttoController(hw_config_); // 再启动动作引擎
     }
 
 public:
@@ -133,8 +132,6 @@ public:
         InitializeOttoController();
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
-
-        // 【修复】删除了不存在的 SetLowBatteryPopupEnabled 函数
     }
 
     virtual AudioCodec* GetAudioCodec() override { return audio_codec_; }
@@ -148,7 +145,7 @@ public:
         return backlight;
     }
 
-    // 【修复】彻底解决低电量弹窗：不管实际电量多少，强制返回 100% 满电且正在充电状态
+    // 强制返回满电，彻底解决低电量弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100;
         charging = true;
@@ -158,22 +155,15 @@ public:
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 【修复】重写此方法，让 MCP 工具和 OTA 工具返回正确的硬件信息
+    // 强制修改返回的芯片和屏幕信息
     virtual std::string GetDeviceStatusJson() override {
-        // 调用父类方法获取基础状态
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
-        
-        // 解析 baseJson 并添加/覆盖正确的硬件信息
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
-            // 强制覆盖芯片和屏幕型号（你的板子实际是 ESP32-S3-N16R8 + ST7789）
             cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3-N16R8"));
             cJSON_ReplaceItemInObject(root, "screen_model", cJSON_CreateString("ST7789 240x240"));
-            
-            // 同时修正 JSON 里的电量信息
             cJSON_ReplaceItemInObject(root, "battery_level", cJSON_CreateNumber(100));
             cJSON_ReplaceItemInObject(root, "is_charging", cJSON_CreateBool(true));
-
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
