@@ -1,14 +1,12 @@
-# ==========================================
-# Otto Robot 专属配置
-# ==========================================
 CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 # CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
 
-# 【关键修正】关闭AFE唤醒，强制启用自定义MultiNet唤醒
+# 【关键修复】关闭 AFE，强制只使用自定义 MultiNet 唤醒词
 CONFIG_USE_AFE_WAKE_WORD=n
 CONFIG_USE_CUSTOM_WAKE_WORD=y
 CONFIG_CUSTOM_WAKE_WORD="ni hao xiao zhi"
 CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+CONFIG_HTTPD_WS_SUPPORT=y
 
 # 16MB 分区与 Flash 配置
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
@@ -17,6 +15,6 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
 
-# 确保生成的 assets.bin 包含自定义唤醒词模型
+# 确保打包资源模型
 CONFIG_FLASH_DEFAULT_ASSETS=y
 CONFIG_USE_DEFAULT_ASSETS=y
