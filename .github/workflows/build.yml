@@ -29,8 +29,9 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            # 使用官方命令，自动读取分区表生成合并固件
-            idf.py merge-bin -o build/otto-firmware-full.bin
+            # 进入 build 目录，直接读取 flash_args 进行合并
+            cd build
+            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
