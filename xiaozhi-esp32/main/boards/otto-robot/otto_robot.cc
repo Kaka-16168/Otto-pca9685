@@ -99,7 +99,16 @@ private:
     }
 
     void InitializeOttoController() { 
-        otto_pca_init(); // 内部已经包含了暴力测试逻辑
+        otto_pca_init(); 
+        
+        // 【核心修复】逐个归位，不再一口气全发，防止瞬间电流过大引发重启
+        ESP_LOGI(TAG, ">>> 开机逐个恢复至 90 度 <<<");
+        for (int i = 0; i < 6; i++) {
+            otto_pca_set_servo_angle(i, 90);
+            vTaskDelay(pdMS_TO_TICKS(50)); // 每个舵机间隔 50ms
+        }
+        
+        // 启动原生动作控制器
         ::InitializeOttoController(hw_config_); 
     }
 
@@ -140,12 +149,14 @@ public:
         return backlight;
     }
 
+    // 屏蔽低电量弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100; charging = true; discharging = false; return true;
     }
 
     virtual Camera* GetCamera() override { return nullptr; }
 
+    // 修正云端型号显示
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
