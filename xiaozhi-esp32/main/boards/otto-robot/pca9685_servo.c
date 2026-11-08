@@ -16,11 +16,12 @@ static i2c_master_dev_handle_t s_dev;
 
 static esp_err_t write_reg(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = {reg, val};
-    return i2c_master_transmit(s_dev, buf, 2, 100 / portTICK_PERIOD_MS);
+    // 【致命修复】ESP-IDF v5/v6 中，超时参数单位是 ms！之前写成 Tick 导致瞬间超时
+    return i2c_master_transmit(s_dev, buf, 2, 1000); 
 }
 
 static esp_err_t read_reg(uint8_t reg, uint8_t *val) {
-    return i2c_master_transmit_receive(s_dev, &reg, 1, val, 1, 100 / portTICK_PERIOD_MS);
+    return i2c_master_transmit_receive(s_dev, &reg, 1, val, 1, 1000);
 }
 
 esp_err_t pca9685_init(void) {
@@ -58,7 +59,7 @@ esp_err_t pca9685_init(void) {
     write_reg(MODE1, old_mode | 0x80);
 
     pca9685_all_off();
-    ESP_LOGI(TAG, "PCA9685 Ready");
+    ESP_LOGI(TAG, "PCA9685 Ready (I2C Timeout Fixed)");
     return ESP_OK;
 }
 
@@ -67,13 +68,18 @@ esp_err_t pca9685_set_angle(uint8_t channel, uint8_t angle) {
     if (angle > 180) angle = 180;
     uint16_t counts = SERVO_0_DEG_COUNT + ((uint32_t)(SERVO_180_DEG_COUNT - SERVO_0_DEG_COUNT) * angle) / 180;
     uint8_t buf[5] = {LED0_ON_L + 4 * channel, 0, 0, counts & 0xFF, (counts >> 8) & 0x0F};
-    return i2c_master_transmit(s_dev, buf, 5, 100 / portTICK_PERIOD_MS);
+    
+    esp_err_t ret = i2c_master_transmit(s_dev, buf, 5, 1000);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "I2C write failed! ch:%d, err:%s", channel, esp_err_to_name(ret));
+    }
+    return ret;
 }
 
 void pca9685_all_off(void) {
     uint8_t buf[5] = {LED0_ON_L, 0, 0, 0, 0};
     for (int ch = 0; ch < 16; ch++) {
         buf[0] = LED0_ON_L + 4 * ch;
-        i2c_master_transmit(s_dev, buf, 5, 100 / portTICK_PERIOD_MS);
+        i2c_master_transmit(s_dev, buf, 5, 1000);
     }
 }
