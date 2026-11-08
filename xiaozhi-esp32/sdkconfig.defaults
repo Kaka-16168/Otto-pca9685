@@ -1,33 +1,11 @@
+# 指定板型
 CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 # CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
 
+# 启用 WebSocket
 CONFIG_HTTPD_WS_SUPPORT=y
 
-# ==========================================
-# 【补全官方默认唤醒词模型，解决 Model Loader 报错】
-# ==========================================
-CONFIG_USE_AFE_WAKE_WORD=y
-CONFIG_USE_WAKENET=y
-# 开启官方内置的中文“你好小智”模型
-CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y
-
-# ==========================================
-# 【强制打包中文与图标字库，解决屏幕无字】
-# ==========================================
-CONFIG_USE_DEFAULT_ASSETS=y
-CONFIG_FLASH_DEFAULT_ASSETS=y
-CONFIG_LVGL_USE_BUILTIN_FONTS=y
-CONFIG_LV_FONT_MONTSERRAT_14=y
-CONFIG_LV_FONT_MONTSERRAT_16=y
-CONFIG_LV_FONT_MONTSERRAT_20=y
-CONFIG_LV_FONT_MONTSERRAT_22=y
-CONFIG_LV_FONT_MONTSERRAT_24=y
-CONFIG_LV_FONT_MONTSERRAT_28=y
-CONFIG_LV_FONT_MONTSERRAT_32=y
-
-# ==========================================
-# 16MB 分区与 Flash 配置
-# ==========================================
+# 设置 16MB Flash
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
