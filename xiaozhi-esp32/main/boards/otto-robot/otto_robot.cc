@@ -63,7 +63,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 40 * 1000 * 1000;
+        io_config.pclk_hz = 20 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -100,14 +100,12 @@ private:
 
     void InitializeOttoController() { 
         otto_pca_init(); 
-        
-        // 开机强制所有舵机回中，测试供电
+        // 开机强制所有舵机回中，测试PCA9685通信和供电
         ESP_LOGI(TAG, "开机测试：强制舵机归位 90 度...");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
         }
         vTaskDelay(pdMS_TO_TICKS(1000)); 
-
         ::InitializeOttoController(hw_config_); 
     }
 
@@ -149,34 +147,27 @@ public:
     }
 
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
-        level = 100;
-        charging = true;
-        discharging = false;
-        return true;
+        level = 100; charging = true; discharging = false; return true;
     }
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 【彻底修复】补全所有设备信息字段，解决后台 Unknown 报错
+    // 修复芯片型号 Unknown 问题
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
-            cJSON_ReplaceItemInObject(root, "chip_name", cJSON_CreateString("ESP32-S3"));
-            cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3"));
-            
+            cJSON_ReplaceItemInObject(root, "chip_name", cJSON_CreateString("ESP32-S3-N16R8"));
+            cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3-N16R8"));
             cJSON_ReplaceItemInObject(root, "screen_type", cJSON_CreateString("ST7789"));
             cJSON_ReplaceItemInObject(root, "screen_model", cJSON_CreateString("ST7789 240x240"));
             cJSON_ReplaceItemInObject(root, "screen_width", cJSON_CreateNumber(240));
             cJSON_ReplaceItemInObject(root, "screen_height", cJSON_CreateNumber(240));
             cJSON_ReplaceItemInObject(root, "screen_resolution", cJSON_CreateString("240x240"));
-            
             cJSON_ReplaceItemInObject(root, "flash_size", cJSON_CreateString("16MB"));
             cJSON_ReplaceItemInObject(root, "flash_model", cJSON_CreateString("16MB"));
-            
             cJSON_ReplaceItemInObject(root, "battery_level", cJSON_CreateNumber(100));
             cJSON_ReplaceItemInObject(root, "is_charging", cJSON_CreateBool(true));
-            
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
@@ -186,5 +177,4 @@ public:
         return baseJson;
     }
 };
-
 DECLARE_BOARD(OttoRobot);
