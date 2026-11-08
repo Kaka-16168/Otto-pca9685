@@ -1,5 +1,7 @@
+# ==========================================
+# ESP32-S3 底层硬件基础配置 (保留你的原配置)
+# ==========================================
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
-
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
 CONFIG_SPIRAM=y
@@ -19,23 +21,46 @@ CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
 CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
 CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 
-
-# Use an internal DMA bounce buffer so incomplete RGB frames can be rejected.
-# Limit its size to preserve internal heap for AFE and WakeNet.
 CONFIG_CAMERA_PSRAM_DMA=n
 CONFIG_CAMERA_DMA_BUFFER_SIZE_MAX=16384
 
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
-
 CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1536
 
 # LVGL Graphics
 CONFIG_LV_USE_SNAPSHOT=y
-# Builtin TLSF pool in PSRAM (lvgl_psram_pool.h). Keep the base pool small
-# enough for 2MB PSRAM boards; 8MB boards add extra pools in lcd_display.cc
-# (chunked to LV_MEM_SIZE — TLSF rejects a single add_pool larger than this).
-# Variants that set CONFIG_SPIRAM=n are switched back to CLIB malloc in
-# scripts/build.py; do not repeat that override on each board.
 CONFIG_LV_USE_BUILTIN_MALLOC=y
 # CONFIG_LV_USE_CLIB_MALLOC is not set
 CONFIG_LV_MEM_SIZE_KILOBYTES=1024
+
+
+# ==========================================
+# 【核心强行覆盖】以下配置优先级最高，绝不会被覆盖
+# ==========================================
+
+# 1. 强制锁定板型为 Otto Robot
+CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+# CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
+
+# 2. 强制锁定 16MB Flash 与 16m 分区表
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
+
+# 3. 强制打包中文字库和完整表情资源 (解决屏幕无字问题)
+CONFIG_FLASH_DEFAULT_ASSETS=y
+CONFIG_USE_DEFAULT_ASSETS=y
+CONFIG_LVGL_USE_BUILTIN_FONTS=y
+
+# 4. 强制使用官方默认的“你好小智”唤醒词引擎 (解决无法唤醒问题)
+CONFIG_USE_AFE_WAKE_WORD=y
+CONFIG_USE_WAKENET=y
+CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y
+CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+# 禁用冲突的自定义多命令词
+# CONFIG_USE_CUSTOM_WAKE_WORD is not set
+
+# 5. 开启 WebSocket 通信
+CONFIG_HTTPD_WS_SUPPORT=y
