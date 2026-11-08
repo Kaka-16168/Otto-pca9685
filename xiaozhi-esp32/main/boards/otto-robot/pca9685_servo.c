@@ -16,11 +16,11 @@ static i2c_master_dev_handle_t s_dev;
 
 static esp_err_t write_reg(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = {reg, val};
-    esp_err_t ret = i2c_master_transmit(s_dev, buf, 2, 1000); 
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "写入寄存器 0x%02X 失败: %s", reg, esp_err_to_name(ret));
-    }
-    return ret;
+    return i2c_master_transmit(s_dev, buf, 2, 1000); 
+}
+
+static esp_err_t read_reg(uint8_t reg, uint8_t *val) {
+    return i2c_master_transmit_receive(s_dev, &reg, 1, val, 1, 1000);
 }
 
 esp_err_t pca9685_init(void) {
@@ -40,46 +40,39 @@ esp_err_t pca9685_init(void) {
         .device_address = PCA9685_ADDR,
         .scl_speed_hz = PCA9685_I2C_FREQ_HZ,
     };
-    esp_err_t ret = i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev);
+    ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev), TAG, "I2C add fail");
+
+    // 1. 软复位并等待
+    write_reg(MODE1, 0x10); 
+    vTaskDelay(pdMS_TO_TICKS(20)); 
     
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "❌ 致命错误: 找不到 PCA9685 (0x40)! 请检查 SDA/SCL 接线!");
-        return ret;
-    }
-
-    ESP_LOGI(TAG, "✅ 成功识别到 PCA9685 芯片!");
-
-    // 初始化芯片
-    write_reg(MODE1, 0x10);
+    // 2. 唤醒并设置推挽输出
+    write_reg(MODE1, 0x00); 
+    write_reg(MODE2, 0x04); 
+    vTaskDelay(pdMS_TO_TICKS(20)); 
+    
+    // 3. 强制设置 50Hz (Prescale = 121)
+    // 先进入睡眠模式才能写 Prescale
+    write_reg(MODE1, 0x10); 
     vTaskDelay(pdMS_TO_TICKS(10));
-    write_reg(MODE1, 0x00);
+    write_reg(PRESCALE, 121); 
     vTaskDelay(pdMS_TO_TICKS(10));
-    
-    uint8_t prescale = (uint8_t)(roundf(25000000.0f / (4096.0f * 50.0f)) - 1.0f);
-    uint8_t old_mode;
-    i2c_master_transmit_receive(s_dev, (uint8_t[]){MODE1}, 1, &old_mode, 1, 1000);
-    write_reg(MODE1, (old_mode & 0x7F) | 0x10);
-    vTaskDelay(pdMS_TO_TICKS(5));
-    write_reg(PRESCALE, prescale);
-    write_reg(MODE1, old_mode);
-    vTaskDelay(pdMS_TO_TICKS(5));
-    write_reg(MODE1, old_mode | 0x80);
+    // 重启并开启自动递增
+    write_reg(MODE1, 0xA0); // 0x80(Restart) + 0x20(AI) + 0x01(ALL_CALL)
+    vTaskDelay(pdMS_TO_TICKS(20));
 
-    ESP_LOGW(TAG, ">>> 开始强制摆动测试 <<<");
+    ESP_LOGI(TAG, "✅ PCA9685 强制唤醒完成，开始 10->170->90 测试...");
     
-    // 强制开启通道输出
-    for (int i = 0; i < 6; i++) {
-        pca9685_set_angle(i, 10);
-    }
+    // 执行一次大幅度的动作
+    for(int i=0; i<6; i++) pca9685_set_angle(i, 10);
     vTaskDelay(pdMS_TO_TICKS(1000));
-    for (int i = 0; i < 6; i++) {
-        pca9685_set_angle(i, 170);
-    }
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    for (int i = 0; i < 6; i++) {
-        pca9685_set_angle(i, 90);
-    }
     
+    for(int i=0; i<6; i++) pca9685_set_angle(i, 170);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    
+    for(int i=0; i<6; i++) pca9685_set_angle(i, 90);
+    
+    ESP_LOGI(TAG, "✅ 舵机测试结束！");
     return ESP_OK;
 }
 
@@ -87,6 +80,7 @@ esp_err_t pca9685_set_angle(uint8_t channel, uint8_t angle) {
     if (channel > 15) return ESP_ERR_INVALID_ARG;
     if (angle > 180) angle = 180;
     
+    // 500us-2500us 标准脉宽
     uint16_t counts = 102 + ((uint32_t)(512 - 102) * angle) / 180;
     uint8_t buf[5] = {LED0_ON_L + 4 * channel, 0, 0, counts & 0xFF, (counts >> 8) & 0x0F};
     return i2c_master_transmit(s_dev, buf, 5, 1000);
