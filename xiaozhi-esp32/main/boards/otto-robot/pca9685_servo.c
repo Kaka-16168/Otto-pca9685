@@ -70,13 +70,13 @@ esp_err_t pca9685_init(void) {
 
     ESP_LOGI(TAG, "PCA9685 初始化完毕，开始测试摆动...");
     
-    // 暴力测试：让 0~5 通道的舵机从 0 度摆到 180 度，再摆回 90 度
+    // 暴力测试：让 0~5 通道的舵机从 10 度摆到 170 度，再摆回 90 度
     for (int i = 0; i < 6; i++) {
-        pca9685_set_angle(i, 0);
+        pca9685_set_angle(i, 10);
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
     for (int i = 0; i < 6; i++) {
-        pca9685_set_angle(i, 180);
+        pca9685_set_angle(i, 170);
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
     for (int i = 0; i < 6; i++) {
