@@ -7,7 +7,7 @@
 #include <esp_log.h>
 #include <esp_rom_sys.h>
 #include <new>
-#include <cJSON.h>
+#include "cJSON.h"
 
 #include "application.h"
 #include "button.h"
@@ -63,7 +63,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 20 * 1000 * 1000;
+        io_config.pclk_hz = 40 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -100,12 +100,15 @@ private:
 
     void InitializeOttoController() { 
         otto_pca_init(); 
-        // 开机强制所有舵机回中，测试PCA9685通信和供电
-        ESP_LOGI(TAG, "开机测试：强制舵机归位 90 度...");
+        
+        // 强制发送 90 度信号，验证 I2C 是否真的通了
+        ESP_LOGW(TAG, ">>> 正在向PCA9685发送开机90度测试指令 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
         vTaskDelay(pdMS_TO_TICKS(1000)); 
+
         ::InitializeOttoController(hw_config_); 
     }
 
@@ -152,22 +155,28 @@ public:
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 修复芯片型号 Unknown 问题
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
-            cJSON_ReplaceItemInObject(root, "chip_name", cJSON_CreateString("ESP32-S3-N16R8"));
-            cJSON_ReplaceItemInObject(root, "chip_model", cJSON_CreateString("ESP32-S3-N16R8"));
-            cJSON_ReplaceItemInObject(root, "screen_type", cJSON_CreateString("ST7789"));
-            cJSON_ReplaceItemInObject(root, "screen_model", cJSON_CreateString("ST7789 240x240"));
-            cJSON_ReplaceItemInObject(root, "screen_width", cJSON_CreateNumber(240));
-            cJSON_ReplaceItemInObject(root, "screen_height", cJSON_CreateNumber(240));
-            cJSON_ReplaceItemInObject(root, "screen_resolution", cJSON_CreateString("240x240"));
-            cJSON_ReplaceItemInObject(root, "flash_size", cJSON_CreateString("16MB"));
-            cJSON_ReplaceItemInObject(root, "flash_model", cJSON_CreateString("16MB"));
-            cJSON_ReplaceItemInObject(root, "battery_level", cJSON_CreateNumber(100));
-            cJSON_ReplaceItemInObject(root, "is_charging", cJSON_CreateBool(true));
+            // 强制修正云端显示的硬件信息
+            cJSON_DeleteItemFromObject(root, "chip_name");
+            cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
+            cJSON_DeleteItemFromObject(root, "chip_model");
+            cJSON_AddStringToObject(root, "chip_model", "ESP32-S3-N16R8");
+            
+            cJSON_DeleteItemFromObject(root, "screen_type");
+            cJSON_AddStringToObject(root, "screen_type", "ST7789");
+            cJSON_DeleteItemFromObject(root, "screen_model");
+            cJSON_AddStringToObject(root, "screen_model", "ST7789");
+            cJSON_DeleteItemFromObject(root, "screen_width");
+            cJSON_AddNumberToObject(root, "screen_width", 240);
+            cJSON_DeleteItemFromObject(root, "screen_height");
+            cJSON_AddNumberToObject(root, "screen_height", 240);
+            
+            cJSON_DeleteItemFromObject(root, "flash_size");
+            cJSON_AddStringToObject(root, "flash_size", "16MB");
+
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
