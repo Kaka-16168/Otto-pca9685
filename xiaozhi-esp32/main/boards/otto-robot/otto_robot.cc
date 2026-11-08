@@ -63,7 +63,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 20 * 1000 * 1000;
+        io_config.pclk_hz = 40 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -100,15 +100,13 @@ private:
 
     void InitializeOttoController() { 
         otto_pca_init(); 
-        
-        // 强制发送 90 度信号，验证 I2C 是否真的通了
-        ESP_LOGW(TAG, ">>> 正在向PCA9685发送开机90度测试指令 <<<");
+        // 开机强制发送 90 度信号测试舵机
+        ESP_LOGW(TAG, ">>> 正在向 PCA9685 发送开机归位指令 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(10));
         }
         vTaskDelay(pdMS_TO_TICKS(1000)); 
-
         ::InitializeOttoController(hw_config_); 
     }
 
@@ -149,21 +147,25 @@ public:
         return backlight;
     }
 
+    // 【修复1】屏蔽低电量弹窗：永远返回 100% 电量且正在充电
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
-        level = 100; charging = true; discharging = false; return true;
+        level = 100; 
+        charging = true; 
+        discharging = false; 
+        return true;
     }
 
     virtual Camera* GetCamera() override { return nullptr; }
 
+    // 【修复2】修正云端后台显示的 Unknown
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
-            // 强制修正云端显示的硬件信息
             cJSON_DeleteItemFromObject(root, "chip_name");
-            cJSON_AddStringToObject(root, "chip_name", "ESP32-S3");
+            cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
             cJSON_DeleteItemFromObject(root, "chip_model");
-            cJSON_AddStringToObject(root, "chip_model", "ESP32-S3");
+            cJSON_AddStringToObject(root, "chip_model", "ESP32-S3-N16R8");
             
             cJSON_DeleteItemFromObject(root, "screen_type");
             cJSON_AddStringToObject(root, "screen_type", "ST7789");
