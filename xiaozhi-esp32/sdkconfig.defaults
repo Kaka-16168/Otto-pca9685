@@ -1,5 +1,12 @@
+# ==========================================
+# 全局默认配置文件 (1号文件)
+# ==========================================
+
+# 强制指定为 Otto Robot 板型
 CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 # CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
+
+# 开启 WebSocket 支持
 CONFIG_HTTPD_WS_SUPPORT=y
 
 # 锁定使用 16MB 分区和自定义分区表
