@@ -1,33 +1,39 @@
-name: Build Otto Firmware
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  build:
-    name: Build ESP32-S3 Otto Firmware
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          fetch-depth: 0
-      - name: Build and Merge Firmware
-        uses: espressif/esp-idf-ci-action@v1.1.0
-        with:
-          esp_idf_version: v6.0.2
-          target: esp32s3
-          path: xiaozhi-esp32
-          command: |
-            idf.py fullclean
-            idf.py build
-            cd build
-            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
-      - name: Upload Firmware Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: otto-firmware-esp32s3
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+# CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
+
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# ==========================================
+# 【强制覆盖唤醒词配置】
+# ==========================================
+CONFIG_USE_AFE_WAKE_WORD=n
+CONFIG_USE_WAKENET=n
+CONFIG_USE_MULTINET=y
+CONFIG_USE_CUSTOM_WAKE_WORD=y
+CONFIG_CUSTOM_WAKE_WORD="ni hao xiao zhi"
+CONFIG_CUSTOM_WAKE_WORD_TEXT="你好小智"
+CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+CONFIG_SR_MN_CN_MULTINET6_QUANT=n
+
+# ==========================================
+# 强制打包中文字库
+# ==========================================
+CONFIG_USE_DEFAULT_ASSETS=y
+CONFIG_FLASH_DEFAULT_ASSETS=y
+CONFIG_LVGL_USE_BUILTIN_FONTS=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_22=y
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_32=y
+
+# ==========================================
+# 16MB 分区与 Flash 配置
+# ==========================================
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
