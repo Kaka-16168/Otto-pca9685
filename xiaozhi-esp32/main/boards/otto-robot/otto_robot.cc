@@ -82,9 +82,18 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // 【核心修复】增加异常保护，防止因表情加载失败导致系统崩溃
+        try {
+            display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                            DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                            DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        } catch (const std::exception& e) {
+            ESP_LOGE(TAG, "表情显示初始化失败，已跳过: %s", e.what());
+            display_ = nullptr;
+        } catch (...) {
+            ESP_LOGE(TAG, "表情显示初始化失败，发生未知错误，已跳过");
+            display_ = nullptr;
+        }
     }
 
     void InitializeButtons() {
@@ -100,15 +109,11 @@ private:
 
     void InitializeOttoController() { 
         otto_pca_init(); 
-        
-        // 【核心修复】逐个归位，不再一口气全发，防止瞬间电流过大引发重启
         ESP_LOGI(TAG, ">>> 开机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
-            vTaskDelay(pdMS_TO_TICKS(50)); // 每个舵机间隔 50ms
+            vTaskDelay(pdMS_TO_TICKS(50)); 
         }
-        
-        // 启动原生动作控制器
         ::InitializeOttoController(hw_config_); 
     }
 
@@ -149,14 +154,12 @@ public:
         return backlight;
     }
 
-    // 屏蔽低电量弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100; charging = true; discharging = false; return true;
     }
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 修正云端型号显示
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
