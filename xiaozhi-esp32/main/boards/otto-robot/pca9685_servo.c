@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/i2c_master.h"
 
 static const char *TAG = "PCA9685";
 static i2c_master_bus_handle_t s_bus;
@@ -16,12 +17,36 @@ static i2c_master_dev_handle_t s_dev;
 
 static esp_err_t write_reg(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = {reg, val};
-    // 【致命修复】ESP-IDF v5/v6 中，超时参数单位是 ms！之前写成 Tick 导致瞬间超时
-    return i2c_master_transmit(s_dev, buf, 2, 1000); 
+    esp_err_t ret = i2c_master_transmit(s_dev, buf, 2, 1000); 
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "写寄存器 0x%02X 失败: %s", reg, esp_err_to_name(ret));
+    }
+    return ret;
 }
 
 static esp_err_t read_reg(uint8_t reg, uint8_t *val) {
     return i2c_master_transmit_receive(s_dev, &reg, 1, val, 1, 1000);
+}
+
+// 扫描 I2C 总线上的所有设备
+static void i2c_scan(i2c_master_bus_handle_t bus) {
+    ESP_LOGI(TAG, "开始扫描 I2C 总线...");
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = addr,
+            .scl_speed_hz = PCA9685_I2C_FREQ_HZ,
+        };
+        i2c_master_dev_handle_t temp_dev;
+        if (i2c_master_bus_add_device(bus, &dev_cfg, &temp_dev) == ESP_OK) {
+            uint8_t dummy;
+            if (i2c_master_transmit(temp_dev, &dummy, 1, 50) == ESP_OK) {
+                ESP_LOGI(TAG, "发现 I2C 设备地址: 0x%02X", addr);
+            }
+            i2c_master_bus_rm_device(temp_dev);
+        }
+    }
+    ESP_LOGI(TAG, "I2C 扫描结束");
 }
 
 esp_err_t pca9685_init(void) {
@@ -35,6 +60,9 @@ esp_err_t pca9685_init(void) {
     };
     ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &s_bus), TAG, "i2c bus fail");
 
+    // 执行扫描，检查物理连接
+    i2c_scan(s_bus);
+
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = PCA9685_ADDR,
@@ -42,14 +70,15 @@ esp_err_t pca9685_init(void) {
     };
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev), TAG, "add dev fail");
 
-    write_reg(MODE1, 0x10);
+    write_reg(MODE1, 0x10); // 软复位
     vTaskDelay(pdMS_TO_TICKS(5));
     write_reg(MODE1, 0x00);
     vTaskDelay(pdMS_TO_TICKS(5));
-    write_reg(MODE2, 0x04);
+    write_reg(MODE2, 0x04); // 推挽输出
 
-    uint8_t prescale = (uint8_t)(roundf(25000000.0f / (4096.0f * 50.0f)) - 1.0f);
-    uint8_t old_mode;
+    // 50Hz 对应 Prescale = 121
+    uint8_t prescale = 121; 
+    uint8_t old_mode = 0;
     read_reg(MODE1, &old_mode);
     write_reg(MODE1, (old_mode & 0x7F) | 0x10);
     vTaskDelay(pdMS_TO_TICKS(2));
@@ -59,21 +88,19 @@ esp_err_t pca9685_init(void) {
     write_reg(MODE1, old_mode | 0x80);
 
     pca9685_all_off();
-    ESP_LOGI(TAG, "PCA9685 Ready (I2C Timeout Fixed)");
+    ESP_LOGI(TAG, "PCA9685 初始化完成");
     return ESP_OK;
 }
 
 esp_err_t pca9685_set_angle(uint8_t channel, uint8_t angle) {
     if (channel > 15) return ESP_ERR_INVALID_ARG;
     if (angle > 180) angle = 180;
-    uint16_t counts = SERVO_0_DEG_COUNT + ((uint32_t)(SERVO_180_DEG_COUNT - SERVO_0_DEG_COUNT) * angle) / 180;
-    uint8_t buf[5] = {LED0_ON_L + 4 * channel, 0, 0, counts & 0xFF, (counts >> 8) & 0x0F};
     
-    esp_err_t ret = i2c_master_transmit(s_dev, buf, 5, 1000);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "I2C write failed! ch:%d, err:%s", channel, esp_err_to_name(ret));
-    }
-    return ret;
+    // 标定值计算，500us-2500us 对应 102-512
+    uint16_t counts = SERVO_0_DEG_COUNT + ((uint32_t)(SERVO_180_DEG_COUNT - SERVO_0_DEG_COUNT) * angle) / 180;
+    
+    uint8_t buf[5] = {LED0_ON_L + 4 * channel, 0, 0, counts & 0xFF, (counts >> 8) & 0x0F};
+    return i2c_master_transmit(s_dev, buf, 5, 1000);
 }
 
 void pca9685_all_off(void) {
