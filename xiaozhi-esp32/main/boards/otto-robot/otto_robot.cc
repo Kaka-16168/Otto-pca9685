@@ -6,6 +6,8 @@
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
 #include <esp_rom_sys.h>
+#include <esp_sleep.h>
+#include <esp_timer.h>
 #include <new>
 #include "cJSON.h"
 
@@ -39,6 +41,7 @@ private:
     WebSocketControlServer* ws_control_server_;
     HardwareConfig hw_config_;
     AudioCodec* audio_codec_;
+    esp_timer_handle_t alarm_timer_ = nullptr;
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(hw_config_.power_charge_detect_pin,
@@ -63,7 +66,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 40 * 1000 * 1000;
+        io_config.pclk_hz = 20 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -100,7 +103,6 @@ private:
 
     void InitializeOttoController() { 
         otto_pca_init(); 
-        // 开机强制发送 90 度信号测试舵机
         ESP_LOGW(TAG, ">>> 正在向 PCA9685 发送开机归位指令 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
@@ -108,6 +110,43 @@ private:
         }
         vTaskDelay(pdMS_TO_TICKS(1000)); 
         ::InitializeOttoController(hw_config_); 
+    }
+
+    // 闹钟响铃回调
+    static void AlarmCallback(void* arg) {
+        OttoRobot* robot = static_cast<OttoRobot*>(arg);
+        ESP_LOGI(TAG, "闹钟时间到！");
+        // 播放提示音
+        Application::GetInstance().PlaySound("alarm.ogg");
+    }
+
+    // 深度关机函数
+    void EnterDeepSleep() {
+        ESP_LOGW(TAG, "收到关机指令，准备深度休眠...");
+        
+        // 1. 关闭所有舵机输出
+        pca9685_all_off();
+        
+        // 2. 彻底关闭屏幕背光（不要黑一下又亮）
+        if (GetBacklight() != nullptr) {
+            GetBacklight()->SetBrightness(0);
+        }
+        
+        // 3. 关闭显示控制器
+        if (display_ != nullptr) {
+            // 具体看 Display 类的实现，如果提供了关闭接口则调用
+            // display_->SetPowerSaveMode(true); 
+        }
+        
+        // 4. 等待屏幕电容放电，确保不闪烁
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        // 5. 配置唤醒源为 BOOT 键 (GPIO 0)
+        esp_sleep_enable_ext0_wakeup(BOOT_BUTTON_GPIO, 0); // 低电平唤醒
+
+        // 6. 进入深度睡眠
+        ESP_LOGW(TAG, "进入深度睡眠...");
+        esp_deep_sleep_start();
     }
 
 public:
@@ -134,6 +173,47 @@ public:
         InitializeOttoController();
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
+
+        // 【注册 MCP 工具，让 AI 能够调用】
+        auto& mcp_server = McpServer::GetInstance();
+
+        // 注册关机工具
+        mcp_server.AddTool("self.system.power_off", "关闭设备并进入深度睡眠",
+            PropertyList(), 
+            [this](const PropertyList& properties) -> ReturnValue {
+                // 异步延迟一下，让大模型先把“好的，正在关机”的话说完
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                EnterDeepSleep();
+                return true;
+            });
+
+        // 注册设置闹钟工具
+        mcp_server.AddTool("self.system.set_alarm", "设置定时闹钟",
+            PropertyList({
+                Property("seconds", kPropertyTypeInteger, 60, 86400) // 默认60秒，最大1天
+            }),
+            [this](const PropertyList& properties) -> ReturnValue {
+                int seconds = properties["seconds"].value<int>();
+                
+                // 如果已有闹钟，先删除
+                if (alarm_timer_ != nullptr) {
+                    esp_timer_stop(alarm_timer_);
+                    esp_timer_delete(alarm_timer_);
+                    alarm_timer_ = nullptr;
+                }
+
+                // 创建新闹钟
+                esp_timer_create_args_t timer_args = {
+                    .callback = &AlarmCallback,
+                    .arg = this,
+                    .name = "otto_alarm"
+                };
+                esp_timer_create(&timer_args, &alarm_timer_);
+                esp_timer_start_once(alarm_timer_, (uint64_t)seconds * 1000000ULL);
+                
+                ESP_LOGI(TAG, "闹钟已设置为 %d 秒后响铃", seconds);
+                return true;
+            });
     }
 
     virtual AudioCodec* GetAudioCodec() override { return audio_codec_; }
@@ -147,7 +227,7 @@ public:
         return backlight;
     }
 
-    // 【修复1】屏蔽低电量弹窗：永远返回 100% 电量且正在充电
+    // 屏蔽低电量弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100; 
         charging = true; 
@@ -157,15 +237,15 @@ public:
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 【修复2】修正云端后台显示的 Unknown
+    // 修正云端后台显示的硬件信息
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
             cJSON_DeleteItemFromObject(root, "chip_name");
-            cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
+            cJSON_AddStringToObject(root, "chip_name", "ESP32-S3");
             cJSON_DeleteItemFromObject(root, "chip_model");
-            cJSON_AddStringToObject(root, "chip_model", "ESP32-S3-N16R8");
+            cJSON_AddStringToObject(root, "chip_model", "ESP32-S3");
             
             cJSON_DeleteItemFromObject(root, "screen_type");
             cJSON_AddStringToObject(root, "screen_type", "ST7789");
