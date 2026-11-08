@@ -3,17 +3,13 @@ CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 
 CONFIG_HTTPD_WS_SUPPORT=y
 
-# ==========================================
-# 【唤醒词修复】关闭冲突配置，强启自定义多命令词
-# ==========================================
+# 强制使用自定义唤醒词 (MultiNet)
 # CONFIG_USE_AFE_WAKE_WORD is not set
 CONFIG_USE_CUSTOM_WAKE_WORD=y
 CONFIG_CUSTOM_WAKE_WORD="ni hao xiao zhi"
 CONFIG_SR_MN_CN_MULTINET7_QUANT=y
 
-# ==========================================
-# 【屏幕字体修复】强制打包中文字库
-# ==========================================
+# 强制打包中文字库
 CONFIG_USE_DEFAULT_ASSETS=y
 CONFIG_FLASH_DEFAULT_ASSETS=y
 CONFIG_LVGL_USE_BUILTIN_FONTS=y
@@ -25,9 +21,7 @@ CONFIG_LV_FONT_MONTSERRAT_24=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
 CONFIG_LV_FONT_MONTSERRAT_32=y
 
-# ==========================================
 # 16MB 分区与 Flash 配置
-# ==========================================
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
