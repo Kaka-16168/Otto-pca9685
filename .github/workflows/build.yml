@@ -29,6 +29,7 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
+            # 进入 build 目录进行合并，确保路径完全正确
             cd build
             esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
