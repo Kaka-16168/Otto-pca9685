@@ -29,9 +29,15 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            # 进入 build 目录进行合并，确保路径完全正确
             cd build
-            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
+            # 【强制合并所有文件，包括 0x810000 处的资源包】
+            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+              --flash_mode dio --flash_freq 80m --flash_size 16MB \
+              0x0 bootloader/bootloader.bin \
+              0x8000 partition_table/partition-table.bin \
+              0x10000 ota_data_initial.bin \
+              0x20000 xiaozhi.bin \
+              0x810000 generated_assets.bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
