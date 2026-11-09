@@ -23,7 +23,6 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "otto_emoji_display.h"
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -90,17 +89,10 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 【核心防崩修复】尝试初始化表情显示，失败则立刻回退到基础显示，防止系统崩溃
-        try {
-            display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                            DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                            DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
-        } catch (...) {
-            ESP_LOGE(TAG, "⚠️ 警告: assets 资源包校验失败或表情加载异常，已回退到基础白屏模式！");
-            display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                         DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                         DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
-        }
+        // 【核心防崩修复】彻底弃用 OttoEmojiDisplay，直接使用最基础、绝对不会崩溃的 SpiLcdDisplay
+        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
@@ -142,7 +134,7 @@ private:
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
                         ESP_LOGW(TAG, "⏰ 主人，时间到了！");
-                        esp_task_wdt_reset(); // 喂狗防止卡死
+                        esp_task_wdt_reset(); // 喂狗
                     },
                     .arg = nullptr, .dispatch_method = ESP_TIMER_TASK, .name = "otto_alarm"
                 };
@@ -176,8 +168,7 @@ public:
     OttoRobot() : boot_button_(BOOT_BUTTON_GPIO), audio_codec_(nullptr) {
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
         
-        // 防止初始化卡死触发重启
-        esp_task_wdt_add(NULL);
+        esp_task_wdt_add(NULL); // 防卡死
 
         InitializeSpi();
         InitializeLcdDisplay();
