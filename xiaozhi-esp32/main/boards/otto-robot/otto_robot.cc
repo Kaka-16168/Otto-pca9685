@@ -89,7 +89,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 直接使用最稳的 SpiLcdDisplay
+        // 使用最稳的 SpiLcdDisplay
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -112,7 +112,9 @@ private:
         // 等系统框架的 WiFi 等组件启动完毕（延时 3 秒）
         vTaskDelay(pdMS_TO_TICKS(3000));
         
-        self->otto_pca_init(); 
+        // 【修复点】直接调用全局 C 函数，而不是 self->otto_pca_init()
+        otto_pca_init(); 
+        
         ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
@@ -174,8 +176,6 @@ public:
     OttoRobot() : boot_button_(BOOT_BUTTON_GPIO), audio_codec_(nullptr) {
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
         
-        // 绝对不要在这里加 esp_task_wdt_add(NULL) ！！！
-
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeButtons();
@@ -194,7 +194,7 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
-        // 【关键操作】启动独立任务去做耗时的硬件和舵机初始化
+        // 启动独立任务去做耗时的硬件和舵机初始化
         xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
 
         InitializeMcpTools();
