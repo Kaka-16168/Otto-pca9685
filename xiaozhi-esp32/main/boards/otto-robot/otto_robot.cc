@@ -82,11 +82,10 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 【绝对防崩修复】使用最基础的 LcdDisplay，放弃 OttoEmojiDisplay
-        // 这样即使云端没下发字体和表情，也不会导致系统 abort 崩溃
-        display_ = new LcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                  DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                  DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // 【修复核心】使用 SpiLcdDisplay 替代 LcdDisplay，参数完全匹配
+        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
