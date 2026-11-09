@@ -1,41 +1,25 @@
-# ==========================================
-# ESP32-S3 专属最终强制覆盖配置 (最高优先级)
-# ==========================================
-
-# 1. 强制锁定板型为 Otto Robot
 CONFIG_BOARD_TYPE_OTTO_ROBOT=y
 # CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set
+CONFIG_HTTPD_WS_SUPPORT=y
 
-# 2. 强制锁定 16MB Flash 与 16m 分区表
+# 16MB Flash 与自定义分区表
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
 
-# 3. 强制打包中文字库和完整表情资源 (解决屏幕无字问题)
+# 资源与中文字库
 CONFIG_FLASH_DEFAULT_ASSETS=y
 CONFIG_USE_DEFAULT_ASSETS=y
 
-# 4. 【核心修复】启用自定义唤醒词 (MultiNet)
-# 关闭默认的 AFE/WakeNet 唤醒，避免冲突
-# CONFIG_USE_AFE_WAKE_WORD is not set
-# CONFIG_USE_WAKENET is not set
-# 开启自定义唤醒词支持
-CONFIG_USE_CUSTOM_WAKE_WORD=y
-# 设置自定义唤醒词拼音，例如“你好小智”就是 ni hao xiao zhi
-CONFIG_CUSTOM_WAKE_WORD="ni hao xiao zhi"
-# 设置唤醒词在屏幕上的显示文本
-CONFIG_CUSTOM_WAKE_WORD_DISPLAY="你好小智"
-# 启用中文 MultiNet7 量化模型
-CONFIG_SR_MN_CN_MULTINET7_QUANT=y
-# 启用中文 MultiNet6 量化模型 (可选，作为备选)
-CONFIG_SR_MN_CN_MULTINET6_QUANT=y
+# 【核心修复】强制指定打包源码默认的 otto-gif 表情包
+CONFIG_DEFAULT_EMOJI_COLLECTION="otto-gif"
 
-# 5. 确保 WebSocket 开启
-CONFIG_HTTPD_WS_SUPPORT=y
+# 唤醒词配置
+CONFIG_USE_AFE_WAKE_WORD=y
+CONFIG_USE_WAKENET=y
+CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y
 
-# ==========================================
-# 延长任务看门狗超时时间 (单位: 秒)
-# ==========================================
+# 延长看门狗超时，防止渲染卡顿触发重启
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=15
