@@ -82,18 +82,10 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 【核心修复】增加异常保护，防止因表情加载失败导致系统崩溃
-        try {
-            display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                            DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                            DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
-        } catch (const std::exception& e) {
-            ESP_LOGE(TAG, "表情显示初始化失败，已跳过: %s", e.what());
-            display_ = nullptr;
-        } catch (...) {
-            ESP_LOGE(TAG, "表情显示初始化失败，发生未知错误，已跳过");
-            display_ = nullptr;
-        }
+        // 【修复】移除报错的 try-catch，直接初始化
+        display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
