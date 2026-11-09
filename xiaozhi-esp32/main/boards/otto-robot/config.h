@@ -56,28 +56,33 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .power_adc_unit = ADC_UNIT_2,
     .power_adc_channel = ADC_CHANNEL_3,
 
-    // 严格对应你要求从 0 到 5 的引脚
-    .right_leg_pin = (gpio_num_t)1,
-    .right_foot_pin = (gpio_num_t)3,
-    .left_leg_pin = (gpio_num_t)0,
-    .left_foot_pin = (gpio_num_t)2,
-    .left_hand_pin = (gpio_num_t)4,
-    .right_hand_pin = (gpio_num_t)5,
+    // 原生舵机引脚，这里随便填，底层已经被 PCA9685 接管
+    .right_leg_pin = GPIO_NUM_1,
+    .right_foot_pin = GPIO_NUM_2,
+    .left_leg_pin = GPIO_NUM_3,
+    .left_foot_pin = GPIO_NUM_4,
+    .left_hand_pin = GPIO_NUM_5,
+    .right_hand_pin = GPIO_NUM_6,
 
     .audio_input_sample_rate = 16000,
     .audio_output_sample_rate = 24000,
     .audio_use_simplex = true,
 
-    .audio_i2s_gpio_ws = GPIO_NUM_NC, .audio_i2s_gpio_bclk = GPIO_NUM_NC,
-    .audio_i2s_gpio_din = GPIO_NUM_NC, .audio_i2s_gpio_dout = GPIO_NUM_NC,
+    .audio_i2s_gpio_ws = GPIO_NUM_NC, 
+    .audio_i2s_gpio_bclk = GPIO_NUM_NC,
+    .audio_i2s_gpio_din = GPIO_NUM_NC, 
+    .audio_i2s_gpio_dout = GPIO_NUM_NC,
 
+    // 麦克风 (ICS43434)
     .audio_i2s_mic_gpio_ws = GPIO_NUM_4,
     .audio_i2s_mic_gpio_sck = GPIO_NUM_5,
     .audio_i2s_mic_gpio_din = GPIO_NUM_6,
+    // 功放 (MAX98357)
     .audio_i2s_spk_gpio_dout = GPIO_NUM_7,
     .audio_i2s_spk_gpio_bclk = GPIO_NUM_15,
     .audio_i2s_spk_gpio_lrck = GPIO_NUM_16,
 
+    // 屏幕引脚 (ST7789)
     .display_backlight_pin = GPIO_NUM_21,
     .display_mosi_pin = GPIO_NUM_11,
     .display_clk_pin = GPIO_NUM_12,
@@ -85,6 +90,7 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .display_rst_pin = GPIO_NUM_10,
     .display_cs_pin = GPIO_NUM_14,
 
+    // I2C 引脚 (PCA9685)
     .i2c_sda_pin = GPIO_NUM_8,
     .i2c_scl_pin = GPIO_NUM_9,
 };
