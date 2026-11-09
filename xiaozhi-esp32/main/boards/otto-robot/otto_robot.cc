@@ -1,7 +1,7 @@
 #include <driver/i2c_master.h>
 #include <driver/ledc.h>
 #include <driver/spi_common.h>
-#include <driver/gpio.h> // 用于背光锁定
+#include <driver/gpio.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
@@ -11,7 +11,6 @@
 #include <esp_sleep.h>
 #include <new>
 #include <string>
-#include <variant>
 #include "cJSON.h"
 
 #include "application.h"
@@ -36,8 +35,8 @@ extern "C" {
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
-// 定义完全符合你当前框架要求的返回类型
-using McpReturnType = std::expected<std::variant<bool, int, std::string, cJSON*, ImageContent*>, std::string>;
+// 【修复】使用小智 MCP 框架标准的 ReturnValue 类型
+using McpReturnType = ReturnValue;
 
 class OttoRobot : public WifiBoard {
 private:
@@ -124,25 +123,13 @@ private:
         mcp_server.AddTool(
             "self.set_alarm",
             "Set an alarm for a specific number of seconds.",
-            {{"seconds", "integer", "The number of seconds until the alarm goes off."}},
+            PropertyList({
+                Property("seconds", kPropertyTypeInteger, 1, 86400) // 1秒到24小时范围
+            }),
             [this](const PropertyList& properties) -> McpReturnType {
-                int seconds = 10; // 兜底默认值
-                
-                // 【核心修复】从 PropertyList 中动态提取用户说的时间
-                for (const auto& prop : properties) {
-                    if (prop.name == "seconds") {
-                        // 如果框架传进来的是纯数字
-                        if (std::holds_alternative<int>(prop.value)) {
-                            seconds = std::get<int>(prop.value);
-                        } 
-                        // 如果框架传进来的是字符串形式的数字 (比如 "30")
-                        else if (std::holds_alternative<std::string>(prop.value)) {
-                            try {
-                                seconds = std::stoi(std::get<std::string>(prop.value));
-                            } catch (...) {}
-                        }
-                    }
-                }
+                // 【核心修复】直接利用 PropertyList 内置的强类型接口提取整型值
+                int seconds = properties["seconds"].value<int>();
+                if (seconds <= 0) seconds = 10; 
 
                 if (alarm_timer_ != nullptr) {
                     esp_timer_stop(alarm_timer_);
@@ -152,7 +139,6 @@ private:
 
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
-                        // 这里可以用喇叭播放提示音
                         ESP_LOGW(TAG, "⏰ 主人，时间到了！");
                     },
                     .arg = nullptr,
@@ -165,29 +151,25 @@ private:
                     ESP_LOGI(TAG, "⏰ 闹钟已设置，%d 秒后响铃", seconds);
                     return true;
                 }
-                return std::unexpected("Failed to create timer");
+                return false;
             }
         );
 
-        // 2. 关机工具
+        // 2. 关机工具（舵机断电+背光引脚锁定）
         mcp_server.AddTool(
             "self.shutdown",
             "Shutdown the robot. Turns off screen and servos, then enters deep sleep.",
-            {},
+            PropertyList(),
             [this](const PropertyList& properties) -> McpReturnType {
                 ESP_LOGW(TAG, "🔌 收到关机指令，准备进入深度睡眠...");
                 
-                // 舵机断电
                 pca9685_all_off();
                 
-                // 彻底关闭背光并锁定引脚，防止深度睡眠时漏电导致屏幕微亮
                 GetBacklight()->SetBrightness(0);
                 gpio_set_level(hw_config_.display_backlight_pin, 0);
                 gpio_hold_en(hw_config_.display_backlight_pin);
 
                 vTaskDelay(pdMS_TO_TICKS(1000));
-                
-                // 进入深度睡眠
                 esp_deep_sleep_start();
                 
                 return true;
