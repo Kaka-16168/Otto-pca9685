@@ -88,7 +88,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 强制使用最纯正的 SpiLcdDisplay，不掺杂任何表情解析
+        // 强制使用最基础、不带任何表情解析逻辑的 SpiLcdDisplay
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -105,6 +105,7 @@ private:
         });
     }
 
+    // 独立任务，延时 3 秒初始化舵机，绝不阻塞主系统
     static void OttoInitTask(void* arg) {
         OttoRobot* self = static_cast<OttoRobot*>(arg);
         vTaskDelay(pdMS_TO_TICKS(3000));
@@ -206,11 +207,11 @@ public:
     }
     virtual Camera* GetCamera() override { return nullptr; }
 
+    // 修正云端状态，彻底移除表情字段
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
-            // 强行修改型号，并移除可能导致云端下发错乱表情的字段
             cJSON_DeleteItemFromObject(root, "chip_name");
             cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
             cJSON_DeleteItemFromObject(root, "chip_model");
@@ -222,7 +223,7 @@ public:
             cJSON_DeleteItemFromObject(root, "screen_height");
             cJSON_AddNumberToObject(root, "screen_height", 240);
             
-            // 通知云端本地不支持表情集合，强制它发文本
+            // 通知云端不要发送表情配置
             cJSON_DeleteItemFromObject(root, "emoji_collection");
             
             char* newJson = cJSON_PrintUnformatted(root);
