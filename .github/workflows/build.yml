@@ -29,11 +29,11 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            # 使用官方命令自动合并，它会自动处理路径和地址
-            idf.py merge-bin -o build/otto-firmware-full.bin
+            # 自动合并，默认在 build/merged-binary.bin 生成
+            idf.py merge-bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
         with:
           name: otto-firmware-esp32s3
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+          path: xiaozhi-esp32/build/merged-binary.bin
