@@ -9,7 +9,6 @@
 #include <esp_rom_sys.h>
 #include <esp_timer.h>
 #include <esp_sleep.h>
-#include <esp_task_wdt.h>
 #include <new>
 #include <string>
 #include "cJSON.h"
@@ -71,7 +70,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 40 * 1000 * 1000;
+        io_config.pclk_hz = 20 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -90,7 +89,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 使用最稳定的 SpiLcdDisplay，避免因资源问题崩溃
+        // 直接使用最稳的 SpiLcdDisplay
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -107,15 +106,21 @@ private:
         });
     }
 
-    void InitializeOttoController() { 
-        otto_pca_init(); 
-        ESP_LOGI(TAG, ">>> 开机逐个恢复至 90 度 <<<");
+    // 【防死机核心】把耗时操作放到独立任务，不阻塞主任务
+    static void OttoInitTask(void* arg) {
+        OttoRobot* self = static_cast<OttoRobot*>(arg);
+        // 等系统框架的 WiFi 等组件启动完毕（延时 3 秒）
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        
+        self->otto_pca_init(); 
+        ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(50)); 
-            esp_task_wdt_reset(); // 每次操作后喂狗，防止循环阻塞触发看门狗
         }
-        ::InitializeOttoController(hw_config_); 
+        ::InitializeOttoController(self->hw_config_); 
+        
+        vTaskDelete(NULL);
     }
 
     void InitializeMcpTools() {
@@ -136,7 +141,6 @@ private:
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
                         ESP_LOGW(TAG, "⏰ 主人，时间到了！");
-                        esp_task_wdt_reset();
                     },
                     .arg = nullptr, .dispatch_method = ESP_TIMER_TASK, .name = "otto_alarm"
                 };
@@ -170,19 +174,12 @@ public:
     OttoRobot() : boot_button_(BOOT_BUTTON_GPIO), audio_codec_(nullptr) {
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
         
-        // 注册任务到看门狗，并在关键步骤喂狗
-        esp_task_wdt_add(NULL);
-        esp_task_wdt_reset();
+        // 绝对不要在这里加 esp_task_wdt_add(NULL) ！！！
 
         InitializeSpi();
-        esp_task_wdt_reset();
-        
         InitializeLcdDisplay();
-        esp_task_wdt_reset();
-
         InitializeButtons();
         InitializePowerManager();
-        esp_task_wdt_reset();
         
         if (hw_config_.audio_use_simplex) {
             audio_codec_ = new NoAudioCodecSimplex(
@@ -196,14 +193,14 @@ public:
                 hw_config_.audio_i2s_gpio_bclk, hw_config_.audio_i2s_gpio_ws,
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
-        esp_task_wdt_reset();
 
-        InitializeOttoController();
+        // 【关键操作】启动独立任务去做耗时的硬件和舵机初始化
+        xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
+
         InitializeMcpTools();
 
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
-        esp_task_wdt_reset(); 
     }
 
     virtual AudioCodec* GetAudioCodec() override { return audio_codec_; }
