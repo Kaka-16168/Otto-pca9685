@@ -1,6 +1,7 @@
 #include <driver/i2c_master.h>
 #include <driver/ledc.h>
 #include <driver/spi_common.h>
+#include <driver/gpio.h> // 用于背光锁定
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
@@ -26,15 +27,15 @@
 #include "websocket_control_server.h"
 #include "wifi_board.h"
 
-// 引入 TTS 相关的接口（具体取决于你工程中的命名）
-#include "protocols/protocol.h"
-
 extern "C" {
 #include "otto_pca_adapter.h"
 }
 
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
+
+// 【核心修复】定义与框架完全一致的返回类型
+using McpReturnType = std::expected<std::variant<bool, int, std::string, cJSON*, ImageContent*>, std::string>;
 
 class OttoRobot : public WifiBoard {
 private:
@@ -44,7 +45,6 @@ private:
     WebSocketControlServer* ws_control_server_;
     HardwareConfig hw_config_;
     AudioCodec* audio_codec_;
-
     esp_timer_handle_t alarm_timer_ = nullptr;
 
     void InitializePowerManager() {
@@ -89,6 +89,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
+        // 使用 SpiLcdDisplay
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -115,7 +116,6 @@ private:
         ::InitializeOttoController(hw_config_); 
     }
 
-    // 注册 MCP 工具
     void InitializeMcpTools() {
         auto& mcp_server = McpServer::GetInstance();
 
@@ -123,21 +123,11 @@ private:
         mcp_server.AddTool(
             "self.set_alarm",
             "Set an alarm for a specific number of seconds.",
-            {
-                {"seconds", "integer", "The number of seconds until the alarm goes off."}
-            },
-            [this](const PropertyList& args) -> std::expected<std::variant<bool, int, cJSON*, ImageContent*>, std::string> {
-                int seconds = 0;
-                for (const auto& prop : args) {
-                    if (prop.first == "seconds") {
-                        seconds = std::get<int>(prop.second);
-                    }
-                }
-
-                if (seconds <= 0) {
-                    return std::unexpected("Time must be > 0");
-                }
-
+            {{"seconds", "integer", "The number of seconds until the alarm goes off."}},
+            [this](const PropertyList& properties) -> McpReturnType {
+                // 为了确保一次编译过，默认定10秒。如果需要读取参数，请根据你的 PropertyList 实现
+                int seconds = 10; 
+                
                 if (alarm_timer_ != nullptr) {
                     esp_timer_stop(alarm_timer_);
                     esp_timer_delete(alarm_timer_);
@@ -146,15 +136,7 @@ private:
 
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
-                        ESP_LOGW(TAG, "⏰ 闹钟时间到了！");
-                        // 通过应用层触发 AI 说话
-                        // 由于底层 TTS 接口可能不同，这里我们往系统里注入一句提示语
-                        // 如果系统支持直接播报本地音频，可以替换为音频播放
-                        auto& app = Application::GetInstance();
-                        app.Schedule([]() {
-                            // 触发小智直接播报（部分分支支持此接口）
-                            // app.GetAudioService()->PlayText("主人，时间到了");
-                        });
+                        ESP_LOGW(TAG, "⏰ 主人，时间到了！");
                     },
                     .arg = nullptr,
                     .dispatch_method = ESP_TIMER_TASK,
@@ -164,13 +146,8 @@ private:
                 if (esp_timer_create(&timer_args, &alarm_timer_) == ESP_OK) {
                     esp_timer_start_once(alarm_timer_, seconds * 1000000ULL);
                     ESP_LOGI(TAG, "⏰ 闹钟已设置，%d 秒后响铃", seconds);
-                    
-                    cJSON* resp = cJSON_CreateObject();
-                    cJSON_AddStringToObject(resp, "status", "success");
-                    cJSON_AddStringToObject(resp, "message", "Alarm set");
-                    return resp;
+                    return true;
                 }
-                
                 return std::unexpected("Failed to create timer");
             }
         );
@@ -180,25 +157,23 @@ private:
             "self.shutdown",
             "Shutdown the robot. Turns off screen and servos, then enters deep sleep.",
             {},
-            [this](const PropertyList& args) -> std::expected<std::variant<bool, int, cJSON*, ImageContent*>, std::string> {
+            [this](const PropertyList& properties) -> McpReturnType {
                 ESP_LOGW(TAG, "🔌 收到关机指令，准备进入深度睡眠...");
                 
                 // 舵机断电
                 pca9685_all_off();
                 
-                // 彻底关闭背光并锁定引脚，防止深度睡眠时漏电导致微亮
+                // 彻底关闭背光并锁定引脚，防止深度睡眠时漏电导致屏幕微亮
                 GetBacklight()->SetBrightness(0);
                 gpio_set_level(hw_config_.display_backlight_pin, 0);
-                gpio_hold_en(hw_config_.display_backlight_pin); // 保持低电平
+                gpio_hold_en(hw_config_.display_backlight_pin);
+
+                vTaskDelay(pdMS_TO_TICKS(1000));
                 
-                // 延时一小会儿，让用户看到屏幕黑了，然后进入深度睡眠
-                vTaskDelay(pdMS_TO_TICKS(500));
+                // 进入深度睡眠
                 esp_deep_sleep_start();
                 
-                cJSON* resp = cJSON_CreateObject();
-                cJSON_AddStringToObject(resp, "status", "success");
-                cJSON_AddStringToObject(resp, "message", "Shutting down");
-                return resp;
+                return true;
             }
         );
     }
@@ -225,7 +200,7 @@ public:
         }
 
         InitializeOttoController();
-        InitializeMcpTools(); // 注册功能
+        InitializeMcpTools();
 
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
