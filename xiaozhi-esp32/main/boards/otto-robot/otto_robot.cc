@@ -9,6 +9,7 @@
 #include <esp_rom_sys.h>
 #include <esp_timer.h>
 #include <esp_sleep.h>
+#include <esp_task_wdt.h>
 #include <new>
 #include <string>
 #include "cJSON.h"
@@ -22,7 +23,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "otto_emoji_display.h" // 【恢复】引入 Otto 表情头文件
+#include "otto_emoji_display.h"
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -89,10 +90,17 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 【核心修复】恢复使用源码默认的 OttoEmojiDisplay
-        display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // 【核心防崩修复】尝试初始化表情显示，失败则立刻回退到基础显示，防止系统崩溃
+        try {
+            display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                            DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                            DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        } catch (...) {
+            ESP_LOGE(TAG, "⚠️ 警告: assets 资源包校验失败或表情加载异常，已回退到基础白屏模式！");
+            display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                         DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                         DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        }
     }
 
     void InitializeButtons() {
@@ -122,28 +130,22 @@ private:
         mcp_server.AddTool(
             "self.set_alarm",
             "Set an alarm for a specific number of seconds.",
-            PropertyList({
-                Property("seconds", kPropertyTypeInteger, 1, 86400)
-            }),
+            PropertyList({{"seconds", kPropertyTypeInteger, 1, 86400}}),
             [this](const PropertyList& properties) -> McpReturnType {
                 int seconds = properties["seconds"].value<int>();
                 if (seconds <= 0) seconds = 10; 
-
                 if (alarm_timer_ != nullptr) {
                     esp_timer_stop(alarm_timer_);
                     esp_timer_delete(alarm_timer_);
                     alarm_timer_ = nullptr;
                 }
-
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
                         ESP_LOGW(TAG, "⏰ 主人，时间到了！");
+                        esp_task_wdt_reset(); // 喂狗防止卡死
                     },
-                    .arg = nullptr,
-                    .dispatch_method = ESP_TIMER_TASK,
-                    .name = "otto_alarm"
+                    .arg = nullptr, .dispatch_method = ESP_TIMER_TASK, .name = "otto_alarm"
                 };
-
                 if (esp_timer_create(&timer_args, &alarm_timer_) == ESP_OK) {
                     esp_timer_start_once(alarm_timer_, seconds * 1000000ULL);
                     ESP_LOGI(TAG, "⏰ 闹钟已设置，%d 秒后响铃", seconds);
@@ -174,6 +176,9 @@ public:
     OttoRobot() : boot_button_(BOOT_BUTTON_GPIO), audio_codec_(nullptr) {
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
         
+        // 防止初始化卡死触发重启
+        esp_task_wdt_add(NULL);
+
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeButtons();
@@ -201,7 +206,6 @@ public:
 
     virtual AudioCodec* GetAudioCodec() override { return audio_codec_; }
     virtual Display* GetDisplay() override { return display_; }
-
     virtual Backlight* GetBacklight() override {
         static PwmBacklight* backlight = nullptr;
         if (backlight == nullptr) {
@@ -209,11 +213,9 @@ public:
         }
         return backlight;
     }
-
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100; charging = true; discharging = false; return true;
     }
-
     virtual Camera* GetCamera() override { return nullptr; }
 
     virtual std::string GetDeviceStatusJson() override {
@@ -239,5 +241,4 @@ public:
         return baseJson;
     }
 };
-
 DECLARE_BOARD(OttoRobot);
