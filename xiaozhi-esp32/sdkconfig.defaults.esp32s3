@@ -34,3 +34,8 @@ CONFIG_SR_MN_CN_MULTINET6_QUANT=y
 
 # 5. 确保 WebSocket 开启
 CONFIG_HTTPD_WS_SUPPORT=y
+
+# ==========================================
+# 延长任务看门狗超时时间 (单位: 秒)
+# ==========================================
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
