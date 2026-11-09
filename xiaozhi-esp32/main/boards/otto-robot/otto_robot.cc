@@ -9,7 +9,6 @@
 #include <esp_rom_sys.h>
 #include <esp_timer.h>
 #include <esp_sleep.h>
-#include <esp_task_wdt.h>
 #include <new>
 #include <string>
 #include "cJSON.h"
@@ -23,7 +22,6 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "otto_emoji_display.h"
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -71,7 +69,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 40 * 1000 * 1000;
+        io_config.pclk_hz = 20 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -90,7 +88,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 使用 SpiLcdDisplay 匹配参数
+        // 【核心防崩修复】使用最基础的 SpiLcdDisplay
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -139,7 +137,6 @@ private:
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
                         ESP_LOGW(TAG, "⏰ 主人，时间到了！");
-                        esp_task_wdt_reset(); // 喂狗
                     },
                     .arg = nullptr,
                     .dispatch_method = ESP_TIMER_TASK,
@@ -176,8 +173,6 @@ public:
     OttoRobot() : boot_button_(BOOT_BUTTON_GPIO), audio_codec_(nullptr) {
         hw_config_ = NON_CAMERA_VERSION_CONFIG;
         
-        esp_task_wdt_add(NULL); // 将主任务加入看门狗监控
-
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeButtons();
