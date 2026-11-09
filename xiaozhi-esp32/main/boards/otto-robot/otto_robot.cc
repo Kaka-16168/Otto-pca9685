@@ -22,7 +22,6 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "otto_emoji_display.h"
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -70,7 +69,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 20 * 1000 * 1000;
+        io_config.pclk_hz = 40 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -89,7 +88,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 使用最稳的 SpiLcdDisplay
+        // 强制使用最纯正的 SpiLcdDisplay，不掺杂任何表情解析
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -106,15 +105,11 @@ private:
         });
     }
 
-    // 【防死机核心】把耗时操作放到独立任务，不阻塞主任务
     static void OttoInitTask(void* arg) {
         OttoRobot* self = static_cast<OttoRobot*>(arg);
-        // 等系统框架的 WiFi 等组件启动完毕（延时 3 秒）
         vTaskDelay(pdMS_TO_TICKS(3000));
         
-        // 【修复点】直接调用全局 C 函数，而不是 self->otto_pca_init()
         otto_pca_init(); 
-        
         ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
@@ -141,14 +136,11 @@ private:
                     alarm_timer_ = nullptr;
                 }
                 esp_timer_create_args_t timer_args = {
-                    .callback = [](void* arg) {
-                        ESP_LOGW(TAG, "⏰ 主人，时间到了！");
-                    },
+                    .callback = [](void* arg) { ESP_LOGW(TAG, "⏰ 主人，时间到了！"); },
                     .arg = nullptr, .dispatch_method = ESP_TIMER_TASK, .name = "otto_alarm"
                 };
                 if (esp_timer_create(&timer_args, &alarm_timer_) == ESP_OK) {
                     esp_timer_start_once(alarm_timer_, seconds * 1000000ULL);
-                    ESP_LOGI(TAG, "⏰ 闹钟已设置，%d 秒后响铃", seconds);
                     return true;
                 }
                 return false;
@@ -160,7 +152,6 @@ private:
             "Shutdown the robot. Turns off screen and servos, then enters deep sleep.",
             PropertyList(),
             [this](const PropertyList& properties) -> McpReturnType {
-                ESP_LOGW(TAG, "🔌 收到关机指令，准备进入深度睡眠...");
                 pca9685_all_off();
                 GetBacklight()->SetBrightness(0);
                 gpio_set_level(hw_config_.display_backlight_pin, 0);
@@ -194,9 +185,7 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
-        // 启动独立任务去做耗时的硬件和舵机初始化
         xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
-
         InitializeMcpTools();
 
         ws_control_server_ = nullptr;
@@ -221,6 +210,7 @@ public:
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
+            // 强行修改型号，并移除可能导致云端下发错乱表情的字段
             cJSON_DeleteItemFromObject(root, "chip_name");
             cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
             cJSON_DeleteItemFromObject(root, "chip_model");
@@ -231,6 +221,10 @@ public:
             cJSON_AddNumberToObject(root, "screen_width", 240);
             cJSON_DeleteItemFromObject(root, "screen_height");
             cJSON_AddNumberToObject(root, "screen_height", 240);
+            
+            // 通知云端本地不支持表情集合，强制它发文本
+            cJSON_DeleteItemFromObject(root, "emoji_collection");
+            
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
