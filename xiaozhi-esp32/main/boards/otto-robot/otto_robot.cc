@@ -1,17 +1,12 @@
 #include <driver/i2c_master.h>
 #include <driver/ledc.h>
 #include <driver/spi_common.h>
-#include <driver/gpio.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
 #include <esp_rom_sys.h>
-#include <esp_timer.h>
-#include <esp_sleep.h>
 #include <new>
-#include <string>
-#include "cJSON.h"
 
 #include "application.h"
 #include "button.h"
@@ -22,6 +17,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
+#include "otto_emoji_display.h"
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -34,8 +30,6 @@ extern "C" {
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
-using McpReturnType = ReturnValue;
-
 class OttoRobot : public WifiBoard {
 private:
     LcdDisplay* display_;
@@ -44,7 +38,6 @@ private:
     WebSocketControlServer* ws_control_server_;
     HardwareConfig hw_config_;
     AudioCodec* audio_codec_;
-    esp_timer_handle_t alarm_timer_ = nullptr;
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(hw_config_.power_charge_detect_pin,
@@ -88,10 +81,10 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 强制使用最基础、不带任何表情解析逻辑的 SpiLcdDisplay
-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // 【回归原版】使用官方的 OttoEmojiDisplay
+        display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
@@ -105,63 +98,14 @@ private:
         });
     }
 
-    // 独立任务，延时 3 秒初始化舵机，绝不阻塞主系统
-    static void OttoInitTask(void* arg) {
-        OttoRobot* self = static_cast<OttoRobot*>(arg);
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        
-        otto_pca_init(); 
+    void InitializeOttoController() { 
+        otto_pca_init(); // 唯一的底层改动
         ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(50)); 
         }
-        ::InitializeOttoController(self->hw_config_); 
-        
-        vTaskDelete(NULL);
-    }
-
-    void InitializeMcpTools() {
-        auto& mcp_server = McpServer::GetInstance();
-
-        mcp_server.AddTool(
-            "self.set_alarm",
-            "Set an alarm for a specific number of seconds.",
-            PropertyList({{"seconds", kPropertyTypeInteger, 1, 86400}}),
-            [this](const PropertyList& properties) -> McpReturnType {
-                int seconds = properties["seconds"].value<int>();
-                if (seconds <= 0) seconds = 10; 
-                if (alarm_timer_ != nullptr) {
-                    esp_timer_stop(alarm_timer_);
-                    esp_timer_delete(alarm_timer_);
-                    alarm_timer_ = nullptr;
-                }
-                esp_timer_create_args_t timer_args = {
-                    .callback = [](void* arg) { ESP_LOGW(TAG, "⏰ 主人，时间到了！"); },
-                    .arg = nullptr, .dispatch_method = ESP_TIMER_TASK, .name = "otto_alarm"
-                };
-                if (esp_timer_create(&timer_args, &alarm_timer_) == ESP_OK) {
-                    esp_timer_start_once(alarm_timer_, seconds * 1000000ULL);
-                    return true;
-                }
-                return false;
-            }
-        );
-
-        mcp_server.AddTool(
-            "self.shutdown",
-            "Shutdown the robot. Turns off screen and servos, then enters deep sleep.",
-            PropertyList(),
-            [this](const PropertyList& properties) -> McpReturnType {
-                pca9685_all_off();
-                GetBacklight()->SetBrightness(0);
-                gpio_set_level(hw_config_.display_backlight_pin, 0);
-                gpio_hold_en(hw_config_.display_backlight_pin);
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                esp_deep_sleep_start();
-                return true;
-            }
-        );
+        ::InitializeOttoController(hw_config_); 
     }
 
 public:
@@ -173,6 +117,7 @@ public:
         InitializeButtons();
         InitializePowerManager();
         
+        // 【回归原版】音频初始化逻辑
         if (hw_config_.audio_use_simplex) {
             audio_codec_ = new NoAudioCodecSimplex(
                 hw_config_.audio_input_sample_rate, hw_config_.audio_output_sample_rate,
@@ -186,8 +131,7 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
-        xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
-        InitializeMcpTools();
+        InitializeOttoController();
 
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
@@ -195,6 +139,7 @@ public:
 
     virtual AudioCodec* GetAudioCodec() override { return audio_codec_; }
     virtual Display* GetDisplay() override { return display_; }
+
     virtual Backlight* GetBacklight() override {
         static PwmBacklight* backlight = nullptr;
         if (backlight == nullptr) {
@@ -202,13 +147,16 @@ public:
         }
         return backlight;
     }
+
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
+        // 强制满电，防弹窗
         level = 100; charging = true; discharging = false; return true;
     }
+
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 修正云端状态，彻底移除表情字段
     virtual std::string GetDeviceStatusJson() override {
+        // 修正云端显示
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
@@ -222,10 +170,6 @@ public:
             cJSON_AddNumberToObject(root, "screen_width", 240);
             cJSON_DeleteItemFromObject(root, "screen_height");
             cJSON_AddNumberToObject(root, "screen_height", 240);
-            
-            // 通知云端不要发送表情配置
-            cJSON_DeleteItemFromObject(root, "emoji_collection");
-            
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
