@@ -10,6 +10,8 @@
 #include <esp_timer.h>
 #include <esp_sleep.h>
 #include <new>
+#include <string>
+#include <variant>
 #include "cJSON.h"
 
 #include "application.h"
@@ -34,7 +36,7 @@ extern "C" {
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
-// 【核心修复】定义与框架完全一致的返回类型
+// 定义完全符合你当前框架要求的返回类型
 using McpReturnType = std::expected<std::variant<bool, int, std::string, cJSON*, ImageContent*>, std::string>;
 
 class OttoRobot : public WifiBoard {
@@ -89,7 +91,6 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 使用 SpiLcdDisplay
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -119,15 +120,30 @@ private:
     void InitializeMcpTools() {
         auto& mcp_server = McpServer::GetInstance();
 
-        // 1. 闹钟工具
+        // 1. 动态闹钟工具
         mcp_server.AddTool(
             "self.set_alarm",
             "Set an alarm for a specific number of seconds.",
             {{"seconds", "integer", "The number of seconds until the alarm goes off."}},
             [this](const PropertyList& properties) -> McpReturnType {
-                // 为了确保一次编译过，默认定10秒。如果需要读取参数，请根据你的 PropertyList 实现
-                int seconds = 10; 
+                int seconds = 10; // 兜底默认值
                 
+                // 【核心修复】从 PropertyList 中动态提取用户说的时间
+                for (const auto& prop : properties) {
+                    if (prop.name == "seconds") {
+                        // 如果框架传进来的是纯数字
+                        if (std::holds_alternative<int>(prop.value)) {
+                            seconds = std::get<int>(prop.value);
+                        } 
+                        // 如果框架传进来的是字符串形式的数字 (比如 "30")
+                        else if (std::holds_alternative<std::string>(prop.value)) {
+                            try {
+                                seconds = std::stoi(std::get<std::string>(prop.value));
+                            } catch (...) {}
+                        }
+                    }
+                }
+
                 if (alarm_timer_ != nullptr) {
                     esp_timer_stop(alarm_timer_);
                     esp_timer_delete(alarm_timer_);
@@ -136,6 +152,7 @@ private:
 
                 esp_timer_create_args_t timer_args = {
                     .callback = [](void* arg) {
+                        // 这里可以用喇叭播放提示音
                         ESP_LOGW(TAG, "⏰ 主人，时间到了！");
                     },
                     .arg = nullptr,
