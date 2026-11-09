@@ -29,11 +29,11 @@ jobs:
           command: |
             idf.py fullclean
             idf.py build
-            cd build
-            esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
+            # 自动合并，默认在 build/merged-binary.bin 生成
+            idf.py merge-bin
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
         with:
           name: otto-firmware-esp32s3
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+          path: xiaozhi-esp32/build/merged-binary.bin
