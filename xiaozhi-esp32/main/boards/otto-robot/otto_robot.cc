@@ -35,7 +35,6 @@ extern "C" {
 #define TAG "OttoRobot"
 extern void InitializeOttoController(const HardwareConfig& hw_config);
 
-// 【修复】使用小智 MCP 框架标准的 ReturnValue 类型
 using McpReturnType = ReturnValue;
 
 class OttoRobot : public WifiBoard {
@@ -71,7 +70,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 20 * 1000 * 1000;
+        io_config.pclk_hz = 40 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -116,18 +115,29 @@ private:
         ::InitializeOttoController(hw_config_); 
     }
 
+    // 打印自定义唤醒词状态，方便调试
+    void CheckCustomWakeWordStatus() {
+        ESP_LOGI(TAG, "=== 唤醒词配置检查 ===");
+#if CONFIG_USE_CUSTOM_WAKE_WORD
+        ESP_LOGI(TAG, "自定义唤醒词模式已启用");
+        ESP_LOGI(TAG, "拼音: %s", CONFIG_CUSTOM_WAKE_WORD);
+        ESP_LOGI(TAG, "显示文本: %s", CONFIG_CUSTOM_WAKE_WORD_DISPLAY);
+#else
+        ESP_LOGW(TAG, "自定义唤醒词模式未启用，当前使用默认 WakeNet 唤醒词");
+#endif
+        ESP_LOGI(TAG, "========================");
+    }
+
     void InitializeMcpTools() {
         auto& mcp_server = McpServer::GetInstance();
 
-        // 1. 动态闹钟工具
         mcp_server.AddTool(
             "self.set_alarm",
             "Set an alarm for a specific number of seconds.",
             PropertyList({
-                Property("seconds", kPropertyTypeInteger, 1, 86400) // 1秒到24小时范围
+                Property("seconds", kPropertyTypeInteger, 1, 86400)
             }),
             [this](const PropertyList& properties) -> McpReturnType {
-                // 【核心修复】直接利用 PropertyList 内置的强类型接口提取整型值
                 int seconds = properties["seconds"].value<int>();
                 if (seconds <= 0) seconds = 10; 
 
@@ -155,23 +165,18 @@ private:
             }
         );
 
-        // 2. 关机工具（舵机断电+背光引脚锁定）
         mcp_server.AddTool(
             "self.shutdown",
             "Shutdown the robot. Turns off screen and servos, then enters deep sleep.",
             PropertyList(),
             [this](const PropertyList& properties) -> McpReturnType {
                 ESP_LOGW(TAG, "🔌 收到关机指令，准备进入深度睡眠...");
-                
                 pca9685_all_off();
-                
                 GetBacklight()->SetBrightness(0);
                 gpio_set_level(hw_config_.display_backlight_pin, 0);
                 gpio_hold_en(hw_config_.display_backlight_pin);
-
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 esp_deep_sleep_start();
-                
                 return true;
             }
         );
@@ -200,6 +205,7 @@ public:
 
         InitializeOttoController();
         InitializeMcpTools();
+        CheckCustomWakeWordStatus(); // 打印状态
 
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
