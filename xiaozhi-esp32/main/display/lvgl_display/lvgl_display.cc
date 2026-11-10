@@ -12,7 +12,6 @@
 #include "audio_codec.h"
 #include "board.h"
 #include "dynamic_glyph_cache.h"
-#include "jpg/image_to_jpeg.h"
 #include "lvgl_display.h"
 #include "lvgl_theme.h"
 #include "settings.h"
@@ -21,7 +20,6 @@
 
 LvglDisplay::LvglDisplay() {
     dynamic_glyph_cache_ = std::make_unique<DynamicGlyphCache>();
-    // Notification timer
     esp_timer_create_args_t notification_timer_args = {
         .callback =
             [](void* arg) {
@@ -37,7 +35,6 @@ LvglDisplay::LvglDisplay() {
     };
     ESP_ERROR_CHECK(esp_timer_create(&notification_timer_args, &notification_timer_));
 
-    // Create a power management lock
     auto ret = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "display_update", &pm_lock_);
     if (ret == ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGI(TAG, "Power management not supported");
@@ -59,8 +56,6 @@ bool LvglDisplay::SetTextFont(std::shared_ptr<LvglFont> text_font) {
         return false;
     }
 
-    // LVGL styles keep raw lv_font_t pointers. Keep the previous font owners alive until the
-    // current theme has rebound every style to the new font.
     auto previous_light_font = light_theme != nullptr ? light_theme->text_font() : nullptr;
     auto previous_dark_font = dark_theme != nullptr ? dark_theme->text_font() : nullptr;
     if (light_theme != nullptr) {
@@ -122,27 +117,13 @@ LvglDisplay::~LvglDisplay() {
         esp_timer_delete(notification_timer_);
     }
 
-    if (network_label_ != nullptr) {
-        lv_obj_del(network_label_);
-    }
-    if (notification_label_ != nullptr) {
-        lv_obj_del(notification_label_);
-    }
-    if (status_label_ != nullptr) {
-        lv_obj_del(status_label_);
-    }
-    if (mute_label_ != nullptr) {
-        lv_obj_del(mute_label_);
-    }
-    if (battery_label_ != nullptr) {
-        lv_obj_del(battery_label_);
-    }
-    if (low_battery_popup_ != nullptr) {
-        lv_obj_del(low_battery_popup_);
-    }
-    if (pm_lock_ != nullptr) {
-        esp_pm_lock_delete(pm_lock_);
-    }
+    if (network_label_ != nullptr) lv_obj_del(network_label_);
+    if (notification_label_ != nullptr) lv_obj_del(notification_label_);
+    if (status_label_ != nullptr) lv_obj_del(status_label_);
+    if (mute_label_ != nullptr) lv_obj_del(mute_label_);
+    if (battery_label_ != nullptr) lv_obj_del(battery_label_);
+    if (low_battery_popup_ != nullptr) lv_obj_del(low_battery_popup_);
+    if (pm_lock_ != nullptr) esp_pm_lock_delete(pm_lock_);
 }
 
 void LvglDisplay::SetStatus(const char* status) {
@@ -151,12 +132,6 @@ void LvglDisplay::SetStatus(const char* status) {
     }
     DisplayLockGuard lock(this);
     if (status_label_ == nullptr) {
-        if (setup_ui_called_) {
-            ESP_LOGW(TAG,
-                     "SetStatus('%s') failed: status_label_ is nullptr (SetupUI() was called but "
-                     "label not created)",
-                     status);
-        }
         return;
     }
     lv_label_set_text(status_label_, status);
@@ -172,17 +147,10 @@ void LvglDisplay::ShowNotification(const std::string& notification, int duration
 
 void LvglDisplay::ShowNotification(const char* notification, int duration_ms) {
     if (!setup_ui_called_) {
-        ESP_LOGW(TAG, "ShowNotification('%s') called before SetupUI() - message will be lost!",
-                 notification);
+        ESP_LOGW(TAG, "ShowNotification('%s') called before SetupUI() - message will be lost!", notification);
     }
     DisplayLockGuard lock(this);
     if (notification_label_ == nullptr) {
-        if (setup_ui_called_) {
-            ESP_LOGW(TAG,
-                     "ShowNotification('%s') failed: notification_label_ is nullptr (SetupUI() was "
-                     "called but label not created)",
-                     notification);
-        }
         return;
     }
     lv_label_set_text(notification_label_, notification);
@@ -198,14 +166,10 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
     auto& board = Board::GetInstance();
     auto codec = board.GetAudioCodec();
 
-    // Update mute icon
     {
         DisplayLockGuard lock(this);
-        if (mute_label_ == nullptr) {
-            return;
-        }
+        if (mute_label_ == nullptr) return;
 
-        // Update icon if mute state changes
         if (codec->output_volume() == 0 && !muted_) {
             muted_ = true;
             lv_label_set_text(mute_label_, MATERIAL_SYMBOLS_VOLUME_OFF);
@@ -215,8 +179,6 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         }
     }
 
-    // Update time — show HH:MM when idle; refresh immediately on state
-    // transitions (update_all=true) and on every minute change thereafter.
     if (app.GetDeviceState() == kDeviceStateIdle) {
         time_t now = time(NULL);
         struct tm* tm_now = localtime(&now);
@@ -228,16 +190,12 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
                 strftime(time_str, sizeof(time_str), "%H:%M", tm_now);
                 SetStatus(time_str);
             }
-        } else {
-            ESP_LOGW(TAG, "System time not set (tm_year=%d)", tm_now->tm_year);
         }
     } else {
-        // Reset so the clock re-appears immediately when idle resumes.
         last_displayed_clock_min_ = -1;
     }
 
     esp_pm_lock_acquire(pm_lock_);
-    // Update battery icon
     int battery_level;
     bool charging, discharging;
     const char* icon = nullptr;
@@ -246,18 +204,12 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
             icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT;
         } else {
             const char* levels[] = {
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_0,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_1,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_2,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_3,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_4,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_5,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_6,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL,
+                MATERIAL_SYMBOLS_BATTERY_ANDROID_0, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_1,
+                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_2, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_3,
+                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_4, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_5,
+                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_6, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL,
             };
-            int level_index = battery_level <= 0
-                                  ? 0
-                                  : (battery_level >= 100 ? 7 : 1 + ((battery_level - 1) * 6 / 99));
+            int level_index = battery_level <= 0 ? 0 : (battery_level >= 100 ? 7 : 1 + ((battery_level - 1) * 6 / 99));
             icon = levels[level_index];
         }
         DisplayLockGuard lock(this);
@@ -266,36 +218,28 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
             lv_label_set_text(battery_label_, battery_icon_);
         }
 
-        // Check low battery popup only when clock tick event is triggered
-        // Because when initializing, the battery level is not ready yet.
         if (low_battery_popup_ != nullptr && !update_all) {
             if (strcmp(icon, MATERIAL_SYMBOLS_BATTERY_ANDROID_0) == 0 && discharging) {
-                if (lv_obj_has_flag(low_battery_popup_,
-                                    LV_OBJ_FLAG_HIDDEN)) {  // Show if low battery popup is hidden
+                if (lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) {
                     lv_obj_remove_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
                     app.Schedule([&app]() { app.PlaySound(Lang::Sounds::OGG_LOW_BATTERY); });
                 }
             } else {
-                // Hide the low battery popup when the battery is not empty
-                if (!lv_obj_has_flag(low_battery_popup_,
-                                     LV_OBJ_FLAG_HIDDEN)) {  // Hide if low battery popup is shown
+                if (!lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) {
                     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
                 }
             }
         }
     }
 
-    // Update network icon every 10 seconds
     static int seconds_counter = 0;
     if (update_all || seconds_counter++ % 10 == 0) {
-        // Don't read 4G network status during firmware upgrade to avoid occupying UART resources
         auto device_state = Application::GetInstance().GetDeviceState();
         static const std::vector<DeviceState> allowed_states = {
-            kDeviceStateIdle,      kDeviceStateStarting,   kDeviceStateWifiConfiguring,
+            kDeviceStateIdle, kDeviceStateStarting, kDeviceStateWifiConfiguring,
             kDeviceStateListening, kDeviceStateActivating,
         };
-        if (std::find(allowed_states.begin(), allowed_states.end(), device_state) !=
-            allowed_states.end()) {
+        if (std::find(allowed_states.begin(), allowed_states.end(), device_state) != allowed_states.end()) {
             icon = board.GetNetworkStateIcon();
             if (network_label_ != nullptr && icon != nullptr && network_icon_ != icon) {
                 DisplayLockGuard lock(this);
@@ -320,7 +264,7 @@ void LvglDisplay::SetPowerSaveMode(bool on) {
     }
 }
 
-// 【核心修复】直接掏空该函数，避免因缺少 V4L2 和 jpeg 宏导致编译失败
+// 【防崩修复】依然保留这个空函数，防止底层的某些调用报错
 bool LvglDisplay::SnapshotToJpeg(std::string& jpeg_data, int quality) {
     ESP_LOGW(TAG, "SnapshotToJpeg is not supported on this build.");
     return false;
