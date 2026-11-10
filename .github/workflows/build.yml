@@ -1,10 +1,8 @@
 name: Build Boards
-
 on:
   workflow_dispatch: 
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -25,14 +23,14 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 手动生成语言配置文件
+          # 1. 生成语言包
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
-          # 2. 清理并编译
+          # 2. 编译 (强制使用我们的配置，清理旧缓存)
           idf.py fullclean
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 3. 进入 build 目录，使用 @flash_args 自动合并
+          # 3. 合并（使用 @flash_args 精准识别所有分区，避免找不到文件）
           cd build
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
