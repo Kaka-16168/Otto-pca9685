@@ -23,6 +23,9 @@ jobs:
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
+          # 【核心修复】先进入项目所在的子目录
+          cd xiaozhi-esp32
+          
           # 直接写死只编译 otto-robot，并将 name 参数改为 otto-robot
           python scripts/build.py otto-robot --name otto-robot
 
@@ -31,5 +34,6 @@ jobs:
         with:
           # 编译成功后，压缩包的名字
           name: xiaozhi_otto-robot_${{ github.sha }}
-          path: build/merged-binary.bin
+          # 【核心修复】修改合并固件的路径，因为它在 xiaozhi-esp32 目录下生成的
+          path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
