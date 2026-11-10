@@ -35,7 +35,7 @@ config CUSTOM_ASSETS_FILE
 
 choice
     prompt "Default Language"
-    default LANGUAGE_EN_US
+    default LANGUAGE_ZH_CN
     help
         Select device display language
 
@@ -127,7 +127,7 @@ choice BOARD_TYPE
     default BOARD_TYPE_XMINI_C3_V3 if IDF_TARGET_ESP32C3
     default BOARD_TYPE_ESP_SENSAIRSHUTTLE if IDF_TARGET_ESP32C5
     default BOARD_TYPE_WAVESHARE_ESP32_C6_TOUCH_AMOLED_2_06 if IDF_TARGET_ESP32C6
-    default BOARD_TYPE_BREAD_COMPACT_WIFI if IDF_TARGET_ESP32S3
+    default BOARD_TYPE_OTTO_ROBOT if IDF_TARGET_ESP32S3
     default BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD if IDF_TARGET_ESP32P4
     default BOARD_TYPE_ESP32_S31_FUNCTION_COREBOARD_1 if IDF_TARGET_ESP32S31
     help
@@ -915,7 +915,7 @@ config USE_MULTILINE_CHAT_MESSAGE
 
 choice WAKE_WORD_TYPE
     prompt "Wake Word Implementation Type"
-    default WAKE_WORD_DISABLED
+    default USE_CUSTOM_WAKE_WORD
     help
         Choose the type of wake word implementation to use.
         scripts/build.py selects a compatible implementation and model automatically.
@@ -997,7 +997,7 @@ config USE_AUDIO_PROCESSOR
 config USE_DEVICE_AEC
     bool "Enable Device-Side AEC"
     default n
-        depends on USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP32_S3_BOX_3 || BOARD_TYPE_ESP32_S3_BOX || BOARD_TYPE_ESP32_S3_BOX_LITE \
+    depends on USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP32_S3_BOX_3 || BOARD_TYPE_ESP32_S3_BOX || BOARD_TYPE_ESP32_S3_BOX_LITE \
         || BOARD_TYPE_LICHUANG_DEV_S3 || BOARD_TYPE_RYMCU_BIGSMART || BOARD_TYPE_ESP32_S3_KORVO_2_V3 || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_75|| BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_1_75C || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_1_83\
         || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_AMOLED_2_06 || BOARD_TYPE_WAVESHARE_ESP32_S3_TOUCH_LCD_4B || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4B || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_4_3 || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_5 \
         || BOARD_TYPE_WAVESHARE_ESP32_P4_WIFI6_TOUCH_LCD_7B || BOARD_TYPE_CHD_ESP32S3_BOX \
@@ -1078,7 +1078,7 @@ menu "Camera Configuration"
         default n
         depends on XIAOZHI_CAMERA_MIRROR_CONFIGURED
         help
-            Flip the captured camera image across the horizontal axis.
+            Flip the captured image across the horizontal axis.
 
     config XIAOZHI_CAMERA_ALLOW_JPEG_INPUT
         bool "Allow JPEG Input"
