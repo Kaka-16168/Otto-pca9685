@@ -25,22 +25,16 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 【修复核心】手动生成语言配置文件，防止 CMake 找不到脚本
+          # 1. 手动生成语言配置文件
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
           # 2. 清理并编译
           idf.py fullclean
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 3. 进入 build 目录合并固件
+          # 3. 进入 build 目录，使用 @flash_args 自动合并
           cd build
-          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
-            --flash_mode dio --flash_freq 80m --flash_size 16MB \
-            0x0 bootloader/bootloader.bin \
-            0x8000 partition_table/partition-table.bin \
-            0xd000 ota_data_initial.bin \
-            0x10000 xiaozhi.bin \
-            0x810000 generated_assets.bin
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
