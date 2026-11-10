@@ -1,3 +1,5 @@
+#include "jpg/image_to_jpeg.h"
+
 #include <esp_err.h>
 #include <esp_log.h>
 #include <material_symbols.h>
