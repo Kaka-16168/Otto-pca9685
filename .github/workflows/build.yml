@@ -1,39 +1,35 @@
-name: Build Otto Firmware
+name: Build Boards
 
 on:
+  workflow_dispatch: # 支持网页手动点击运行
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build ESP32-S3 Otto Firmware
+  build_otto:
+    name: Build otto-robot
     runs-on: ubuntu-latest
-
+    container:
+      image: espressif/idf:release-v6.1
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4 # 使用稳定的 v4 版本
 
-      - name: Build and Merge Firmware
-        uses: espressif/esp-idf-ci-action@v1.1.0
-        with:
-          esp_idf_version: v6.0.2
-          target: esp32s3
-          path: xiaozhi-esp32
-          command: |
-            idf.py fullclean
-            idf.py build
-            # 自动合并，默认在 build/merged-binary.bin 生成
-            idf.py merge-bin
+      - name: Build otto-robot variant
+        shell: bash
+        run: |
+          source "$IDF_PATH/export.sh"
+          # 直接写死只编译 otto-robot，并将 name 参数改为 otto-robot
+          python scripts/build.py otto-robot --name otto-robot
 
-      - name: Upload Firmware Artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: otto-firmware-esp32s3
-          path: xiaozhi-esp32/build/merged-binary.bin
+          # 编译成功后，压缩包的名字
+          name: xiaozhi_otto-robot_${{ github.sha }}
+          path: build/merged-binary.bin
+          if-no-files-found: error
