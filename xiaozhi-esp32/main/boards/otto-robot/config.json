@@ -1,13 +1,19 @@
 {
+  "type": "otto-robot",
   "target": "esp32s3",
   "builds": [
     {
       "name": "otto-robot",
       "sdkconfig_append": [
         "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
-        "CONFIG_USE_DEFAULT_ASSETS=y",
+        "CONFIG_HTTPD_WS_SUPPORT=y",
+        "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
+        "CONFIG_ESPTOOLPY_FLASHSIZE=\"16MB\"",
+        "CONFIG_PARTITION_TABLE_CUSTOM=y",
+        "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"",
+        "CONFIG_PARTITION_TABLE_FILENAME=\"partitions/v2/16m.csv\"",
         "CONFIG_FLASH_DEFAULT_ASSETS=y",
-        "CONFIG_LVGL_USE_BUILTIN_FONTS=y",
+        "CONFIG_USE_DEFAULT_ASSETS=y",
         "CONFIG_USE_AFE_WAKE_WORD=y",
         "CONFIG_USE_WAKENET=y",
         "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y"
