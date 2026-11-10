@@ -1,7 +1,7 @@
 name: Build Boards
 
 on:
-  workflow_dispatch: # 支持网页手动点击运行
+  workflow_dispatch: 
   push:
     branches:
       - main
@@ -23,23 +23,15 @@ jobs:
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
-          # 1. 进入项目子目录
           cd xiaozhi-esp32
           
-          # 2. 彻底抛弃 build.py，直接使用原生 IDF 编译
-          idf.py fullclean
-          idf.py build
-          
-          # 3. 进入 build 目录进行合并
-          cd build
-          
-          # 4. 生成合并固件
-          esptool.py --chip esp32s3 merge_bin -o merged-binary.bin @flash_args
+          # 使用官方脚本进行编译，它会自动处理资源包并生成完整的 bin
+          python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_${{ github.sha }}
-          # 路径对应 build 目录下的文件
+          # 官方脚本通常会将合并后的固件放在这里
           path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
