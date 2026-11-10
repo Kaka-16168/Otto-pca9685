@@ -25,15 +25,14 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 清理项目，并使用我们自己写好的配置直接编译（彻底绕开 build.py 的校验）
+          # 1. 直接使用 idf.py，并显式指定 sdkconfig 文件
           idf.py fullclean
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
           # 2. 进入 build 目录
           cd build
           
-          # 3. 手动按照 16MB 分区表进行暴力合并
-          # 注意：这里包含了 generated_assets.bin，这是解决文件只有 3MB 的关键！
+          # 3. 手动合并固件（包含 generated_assets.bin）
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 80m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
