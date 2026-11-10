@@ -25,12 +25,17 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 清理并直接编译
+          # 1. 重新配置，这一步会自动根据 idf_component.yml 拉取缺失的依赖
           idf.py fullclean
+          idf.py reconfigure
+          
+          # 2. 直接编译，并强制使用我们自己的配置文件
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 2. 进入 build 目录合并固件
+          # 3. 进入 build 目录
           cd build
+          
+          # 4. 手动合并固件（包含 generated_assets.bin，生成全量固件）
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 80m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
