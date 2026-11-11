@@ -22,14 +22,11 @@ jobs:
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
-          
-          # 【核心回归】使用官方脚本，它会自动生成语言包、编译、合并完整的固件
           python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          # 官方脚本默认合并包在 build 目录下
           path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
