@@ -18,7 +18,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "otto_emoji_display.h" // 恢复官方表情库
+#include "otto_emoji_display.h" 
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -82,7 +82,6 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 恢复官方的 OttoEmojiDisplay
         display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                         DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                         DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -99,13 +98,10 @@ private:
         });
     }
 
-    // 后台静默初始化舵机，绝对不卡死主任务
     static void OttoInitTask(void* arg) {
         OttoRobot* self = static_cast<OttoRobot*>(arg);
-        vTaskDelay(pdMS_TO_TICKS(3000)); // 等系统完全启动
-        
+        vTaskDelay(pdMS_TO_TICKS(2000));
         otto_pca_init(); 
-        ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(50)); 
@@ -123,6 +119,7 @@ public:
         InitializeButtons();
         InitializePowerManager();
         
+        // 【核心修复】确保音频芯片正确初始化单工模式（麦克风和喇叭独立引脚）
         if (hw_config_.audio_use_simplex) {
             audio_codec_ = new NoAudioCodecSimplex(
                 hw_config_.audio_input_sample_rate, hw_config_.audio_output_sample_rate,
@@ -136,7 +133,6 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
-        // 启动后台任务
         xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
 
         ws_control_server_ = nullptr;
