@@ -18,6 +18,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
+#include "otto_emoji_display.h" // 恢复官方表情库
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -81,10 +82,10 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 绝对防御：使用静态基础屏幕，不加载任何动态表情，告别 abort()
-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // 恢复官方的 OttoEmojiDisplay
+        display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
@@ -98,10 +99,10 @@ private:
         });
     }
 
-    // 独立任务，延时 2 秒初始化舵机，绝不阻塞主系统导致看门狗重启
+    // 后台静默初始化舵机，绝对不卡死主任务
     static void OttoInitTask(void* arg) {
         OttoRobot* self = static_cast<OttoRobot*>(arg);
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(3000)); // 等系统完全启动
         
         otto_pca_init(); 
         ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
@@ -135,7 +136,7 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
-        // 后台静默初始化舵机
+        // 启动后台任务
         xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
 
         ws_control_server_ = nullptr;
@@ -153,14 +154,12 @@ public:
         return backlight;
     }
 
-    // 拒绝低电量弹窗
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         level = 100; charging = true; discharging = false; return true;
     }
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 洗掉云端认知识别，拒绝下发动态表情集合
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
@@ -169,8 +168,10 @@ public:
             cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
             cJSON_DeleteItemFromObject(root, "screen_type");
             cJSON_AddStringToObject(root, "screen_type", "ST7789");
-            cJSON_DeleteItemFromObject(root, "emoji_collection"); // 剔除表情字段
-            
+            cJSON_DeleteItemFromObject(root, "screen_width");
+            cJSON_AddNumberToObject(root, "screen_width", 240);
+            cJSON_DeleteItemFromObject(root, "screen_height");
+            cJSON_AddNumberToObject(root, "screen_height", 240);
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
