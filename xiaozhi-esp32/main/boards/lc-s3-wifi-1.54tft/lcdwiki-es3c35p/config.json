@@ -1,3 +1,5 @@
+"manufacturer": "lc-s3-wifi-1.54tft",
+
 {
     "type": "lcdwiki-es3c35p",
     "target": "esp32s3",
