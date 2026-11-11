@@ -1,8 +1,10 @@
 name: Build Boards
+
 on:
   workflow_dispatch: 
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -26,13 +28,25 @@ jobs:
           # 1. 生成语言包
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
-          # 2. 编译 (强制使用我们的配置，清理旧缓存)
+          # 2. 编译
           idf.py fullclean
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 3. 合并（使用 @flash_args 精准识别所有分区，避免找不到文件）
+          # 3. 进入 build 目录
           cd build
-          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin @flash_args
+          
+          # 4. 打印所有生成的文件，方便你在日志里排查
+          echo "========== 当前生成的 Bin 文件列表 =========="
+          ls -lh *.bin bootloader/*.bin partition_table/*.bin
+          
+          # 5. 按照 16MB 分区表（16m.csv）的精准地址，强制手动合并所有文件！
+          # 0x0: 引导程序, 0x8000: 分区表, 0x10000: 主程序, 0x810000: 资源包
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            0x0 bootloader/bootloader.bin \
+            0x8000 partition_table/partition-table.bin \
+            0x10000 xiaozhi.bin \
+            0x810000 generated_assets.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
