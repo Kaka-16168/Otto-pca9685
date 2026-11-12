@@ -22,6 +22,7 @@ jobs:
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
+          idf.py fullclean   # 清理旧缓存
           python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
