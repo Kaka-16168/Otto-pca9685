@@ -921,12 +921,9 @@ choice WAKE_WORD_TYPE
         scripts/build.py selects a compatible implementation and model automatically.
         When configuring manually, select the corresponding ESP-SR models as well.
 
-    config WAKE_WORD_DISABLED
-         default n
-        
+   
 
     config USE_CUSTOM_WAKE_WORD
-        bool "Multinet model (Custom Wake Word)"
         default y
         depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S31) && SPIRAM
         help
