@@ -5,7 +5,15 @@
     {
       "name": "otto-robot",
       "sdkconfig_append": [
-        "CONFIG_BOARD_TYPE_OTTO_ROBOT=y"
+        "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
+        "CONFIG_USE_AFE_WAKE_WORD=n",
+        "CONFIG_USE_WAKENET=n",
+        "CONFIG_SR_WN_WN9_HIESP=n",
+        "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
+        "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+        "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"",
+        "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"",
+        "CONFIG_SR_MN_CN_MULTINET7_QUANT=y"
       ]
     }
   ]
