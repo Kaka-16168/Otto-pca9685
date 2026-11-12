@@ -23,27 +23,18 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 让 build.py 先生成基础的 sdkconfig
-          idf.py reconfigure
+          # 1. 【核心防御】彻底清理可能残留的旧缓存 sdkconfig
+          # 这一步能确保我们 config.json 里的自定义唤醒词配置绝对生效
+          idf.py fullclean
           
-          # 2. 【暴力硬改】直接修改生成的 sdkconfig 文件，神挡杀神！
-          sed -i 's/CONFIG_LANGUAGE_EN_US=y/CONFIG_LANGUAGE_ZH_CN=y/g' sdkconfig
-          sed -i 's/CONFIG_USE_AFE_WAKE_WORD=y/CONFIG_USE_AFE_WAKE_WORD=n/g' sdkconfig
-          sed -i 's/CONFIG_SR_WN_WN9_HIESP=y/CONFIG_SR_WN_WN9_HIESP=n/g' sdkconfig
-          sed -i 's/CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y/CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n/g' sdkconfig
-          sed -i 's/CONFIG_USE_CUSTOM_WAKE_WORD=n/CONFIG_USE_CUSTOM_WAKE_WORD=y/g' sdkconfig
-          
-          # 3. 强行追加自定义唤醒词和模型
-          echo "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"" >> sdkconfig
-          echo "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"" >> sdkconfig
-          echo "CONFIG_SR_MN_CN_MULTINET7_QUANT=y" >> sdkconfig
-          
-          # 4. 开始正常编译
+          # 2. 使用官方脚本编译，它会自动处理一切依赖和资源合并
+          # 不要加任何 --wake-word 参数，让它完全遵从 config.json
           python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
+          # 官方脚本默认生成的合并完整固件就在这个路径
           path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
