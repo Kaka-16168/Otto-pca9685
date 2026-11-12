@@ -922,7 +922,7 @@ choice WAKE_WORD_TYPE
         When configuring manually, select the corresponding ESP-SR models as well.
 
     config WAKE_WORD_DISABLED
-         bool "Disabled"
+         default y
         help
             Disable wake word detection
 
