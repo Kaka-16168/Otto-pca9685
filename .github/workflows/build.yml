@@ -22,19 +22,12 @@ jobs:
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
-          
-          # 1. 【核心防御】彻底清理可能残留的旧缓存 sdkconfig
-          # 这一步能确保我们 config.json 里的自定义唤醒词配置绝对生效
           idf.py fullclean
-          
-          # 2. 使用官方脚本编译，它会自动处理一切依赖和资源合并
-          # 不要加任何 --wake-word 参数，让它完全遵从 config.json
           python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          # 官方脚本默认生成的合并完整固件就在这个路径
           path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
