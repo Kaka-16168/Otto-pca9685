@@ -17,31 +17,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and Merge Firmware
+      - name: Build otto-robot variant
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
-          
-          # 1. 生成语言包 (防止报错)
-          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
-          
-          # 2. 【核心】强制清理缓存，直接使用 idf.py 编译！
           idf.py fullclean
-          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
-          
-          # 3. 手动合并全部文件，生成 7MB 固件
-          cd build
-          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
-            --flash_mode dio --flash_freq 80m --flash_size 16MB \
-            0x0 bootloader/bootloader.bin \
-            0x8000 partition_table/partition-table.bin \
-            0x10000 xiaozhi.bin \
-            0x810000 generated_assets.bin
+          python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+          path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
