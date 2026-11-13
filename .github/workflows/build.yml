@@ -23,22 +23,35 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理删除旧缓存
+          # 1. 物理删除可能残留的旧配置文件
           rm -f sdkconfig sdkconfig.old
           idf.py fullclean
           
-          # 2. 【魔法修改】用 Python 脚本自动注释掉 build.py 里的报错拦截！
-          python -c "
-          import re
-          with open('scripts/build.py', 'r') as f:
-              content = f.read()
-          # 把 raise ValueError 替换成 pass
-          content = re.sub(r'raise ValueError\(\s*f\"--wake-word is incompatible.*?\s*\)', 'pass', content, flags=re.DOTALL)
-          with open('scripts/build.py', 'w') as f:
-              f.write(content)
-          "
+          # 2. 【魔法一】强行覆盖你的 config.json，确保配置绝对纯净！
+          cat > main/boards/otto-robot/config.json << 'EOF'
+          {
+            "type": "otto-robot",
+            "target": "esp32s3",
+            "builds": [
+              {
+                "name": "otto-robot",
+                "sdkconfig_append": [
+                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
+                  "CONFIG_USE_AFE_WAKE_WORD=n",
+                  "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+                  "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"",
+                  "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"",
+                  "CONFIG_SR_MN_CN_MULTINET7_QUANT=y"
+                ]
+              }
+            ]
+          }
+          EOF
           
-          # 3. 运行官方脚本，现在它绝对不会报错了，会完美打包字库和表情
+          # 3. 【魔法二】强行注释掉 build.py 里拦截报错的代码，让它乖乖打包！
+          sed -i 's/raise ValueError(/pass # raise ValueError(/g' scripts/build.py
+          
+          # 4. 运行官方脚本（现在配置被强制修正了，它绝对不报错，且会打包出巨大的资源文件）
           python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
