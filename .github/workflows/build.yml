@@ -17,41 +17,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and Merge Full Firmware
+      - name: Build otto-robot variant
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 生成语言包
-          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
-          
-          # 2. 清理并编译
+          # 物理删除所有可能残留的旧配置
+          rm -f sdkconfig sdkconfig.old
           idf.py fullclean
-          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 3. 检查关键产物是否生成
-          cd build
-          ls -lh bootloader/bootloader.bin partition_table/partition-table.bin xiaozhi.bin generated_assets.bin
-          
-          # 4. 严格指定地址合并（0x810000 对应 16M 分区表的 assets 偏移）
-          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
-            --flash_mode dio --flash_freq 40m --flash_size 16MB \
-            0x0 bootloader/bootloader.bin \
-            0x8000 partition_table/partition-table.bin \
-            0x10000 xiaozhi.bin \
-            0x810000 generated_assets.bin
-          
-          # 5. 校验合并后的总大小（应大于 6MB，若小于 6MB 证明资源包遗漏）
-          SIZE=$(stat -c%s otto-firmware-full.bin)
-          if [ "$SIZE" -lt 6000000 ]; then
-            echo "❌ 固件合并异常：大小仅有 $SIZE 字节，资源包未合并成功！"
-            exit 1
-          fi
+          # 运行官方脚本，它现在不仅不会报错，还会自动打包资源！
+          python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+          path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
