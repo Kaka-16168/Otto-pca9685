@@ -23,11 +23,11 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 物理删除所有可能残留的旧配置
+          # 【核心清洗】物理铲除所有旧缓存和配置文件
           rm -f sdkconfig sdkconfig.old
           idf.py fullclean
           
-          # 运行官方脚本，它现在不仅不会报错，还会自动打包资源！
+          # 运行官方脚本（现在没有冲突了，它会乖乖去打包资源）
           python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
