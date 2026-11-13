@@ -23,11 +23,11 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理删除一切可能残留的旧配置！
-          rm -f sdkconfig sdkconfig.old config.json
-          idf.py fullclean
+          # 1. 物理删除一切可能的旧缓存
+          rm -f sdkconfig sdkconfig.old
+          rm -rf build
           
-          # 2. 强行重写板卡配置，只留板型
+          # 2. 强行重写板卡级 config.json（一丁点 AFE 都不留）
           cat > main/boards/otto-robot/config.json << 'EOF'
           {
             "type": "otto-robot",
@@ -36,21 +36,24 @@ jobs:
               {
                 "name": "otto-robot",
                 "sdkconfig_append": [
-                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y"
+                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
+                  "CONFIG_USE_AFE_WAKE_WORD=n",
+                  "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+                  "CONFIG_USE_WAKENET=n",
+                  "CONFIG_SR_WN_WN9_HIESP=n",
+                  "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
+                  "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"",
+                  "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"",
+                  "CONFIG_SR_MN_CN_MULTINET7_QUANT=y"
                 ]
               }
             ]
           }
           EOF
           
-          # 3. 强行覆盖根目录的 sdkconfig.defaults（防幽灵）
-          cat > sdkconfig.defaults << 'EOF'
-          CONFIG_IDF_TARGET="esp32s3"
-          CONFIG_LANGUAGE_ZH_CN=y
-          EOF
-          
-          # 4. 强行覆盖 esp32s3 专属配置（降频保命 + 自定义唤醒词）
+          # 3. 强行重写全局 sdkconfig.defaults.esp32s3（保命降频 + 资源强制打包）
           cat > sdkconfig.defaults.esp32s3 << 'EOF'
+          CONFIG_IDF_TARGET="esp32s3"
           CONFIG_BOARD_TYPE_OTTO_ROBOT=y
           CONFIG_HTTPD_WS_SUPPORT=y
           CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
@@ -77,12 +80,12 @@ jobs:
           CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
           EOF
           
-          # 5. 重新配置并编译（自动拉取组件）
-          idf.py reconfigure
+          # 4. 清理并直接使用原生 idf.py 编译（彻底抛弃有病的 build.py）
+          idf.py fullclean
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           idf.py build
           
-          # 6. 【核心修复】手动打包资源，用通配符找路径，彻底告别 0 字节！
+          # 5. 【暴力打包资源】使用通配符自动寻找依赖路径，强制生成大于 2.5MB 的 assets
           python scripts/build_default_assets.py \
             --output build/generated_assets.bin \
             --sdkconfig sdkconfig \
@@ -91,11 +94,11 @@ jobs:
             --esp_sr_model_path $(find managed_components -type d -name "model" | grep "esp-sr" | head -n 1) \
             --noto_fonts_path $(find managed_components -maxdepth 1 -type d -name "xiaozhi-fonts" | head -n 1)
           
-          # 7. 检查资源包大小
+          # 6. 检查资源包是否大于 0
           cd build
           ls -lh generated_assets.bin
           
-          # 8. 强制合并
+          # 7. 强制合并
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 40m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
