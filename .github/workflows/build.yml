@@ -23,33 +23,38 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 强制清理残留
+          # 1. 彻底清理所有历史缓存
           rm -f sdkconfig sdkconfig.old
           idf.py fullclean
           
-          # 2. 【魔法修复】用 Python 安全地将拦截报错变成打印，绝对不破坏语法！
-          python -c "
-          with open('scripts/build.py', 'r') as f:
-              content = f.read()
-          content = content.replace('raise ValueError(', 'print(')
-          with open('scripts/build.py', 'w') as f:
-              f.write(content)
-          "
+          # 2. 【核心洗脑】用代码强制重写 config.json，把参数焊死！
+          cat > main/boards/otto-robot/config.json << 'EOF'
+          {
+            "type": "otto-robot",
+            "target": "esp32s3",
+            "builds": [
+              {
+                "name": "otto-robot",
+                "sdkconfig_append": [
+                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
+                  "CONFIG_USE_AFE_WAKE_WORD=n",
+                  "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+                  "CONFIG_USE_WAKENET=n",
+                  "CONFIG_SR_WN_WN9_HIESP=n",
+                  "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
+                  "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"",
+                  "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"",
+                  "CONFIG_SR_MN_CN_MULTINET7_QUANT=y",
+                  "CONFIG_FLASH_DEFAULT_ASSETS=y",
+                  "CONFIG_USE_DEFAULT_ASSETS=y"
+                ]
+              }
+            ]
+          }
+          EOF
           
-          # 3. 跑官方脚本，让它自动设置 target 为 esp32s3，并自动打包资源！
+          # 3. 运行官方原版 build.py（配置全对，它绝对不会再报错，且会自动打包字库和模型）
           python scripts/build.py otto-robot --name otto-robot
-          
-          # 4. 如果官方脚本没有合并固件，我们手动合并（强制指定 esp32s3）
-          if [ ! -f build/merged-binary.bin ]; then
-            cd build
-            esptool.py --chip esp32s3 merge_bin -o merged-binary.bin \
-              --flash_mode dio --flash_freq 40m --flash_size 16MB \
-              0x0 bootloader/bootloader.bin \
-              0x8000 partition_table/partition-table.bin \
-              0x10000 xiaozhi.bin \
-              0x810000 generated_assets.bin
-            cd ..
-          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
