@@ -6,7 +6,6 @@
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
 #include <esp_rom_sys.h>
-#include <esp_task_wdt.h> // 引入看门狗
 #include <new>
 #include "cJSON.h"
 
@@ -19,7 +18,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "otto_emoji_display.h"
+#include "otto_emoji_display.h" // 换回官方表情库
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -83,6 +82,7 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
+        // 恢复 OttoEmojiDisplay
         display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                         DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                         DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -99,18 +99,19 @@ private:
         });
     }
 
-    void InitializeOttoController() { 
+    // 后台静默初始化舵机，防止卡死
+    static void OttoInitTask(void* arg) {
+        OttoRobot* self = static_cast<OttoRobot*>(arg);
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        
         otto_pca_init(); 
-        // 原生初始化，在循环中不断喂狗，防止开机卡死
-        esp_task_wdt_add(NULL); 
         ESP_LOGI(TAG, ">>> 舵机逐个恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(50)); 
-            esp_task_wdt_reset(); // 喂狗
         }
-        ::InitializeOttoController(hw_config_); 
-        esp_task_wdt_delete(NULL);
+        ::InitializeOttoController(self->hw_config_); 
+        vTaskDelete(NULL);
     }
 
 public:
@@ -135,7 +136,8 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
-        InitializeOttoController();
+        xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
+
         ws_control_server_ = nullptr;
         GetBacklight()->RestoreBrightness();
     }
@@ -163,6 +165,8 @@ public:
         if (root != nullptr) {
             cJSON_DeleteItemFromObject(root, "chip_name");
             cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
+            cJSON_DeleteItemFromObject(root, "screen_type");
+            cJSON_AddStringToObject(root, "screen_type", "ST7789");
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
