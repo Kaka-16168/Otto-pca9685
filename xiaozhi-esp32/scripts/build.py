@@ -1470,10 +1470,10 @@ def _validate_configured_symbols(symbols: list[str], option_name: str) -> None:
         if not re.search(rf"^{re.escape(symbol)}=y$", configured, re.MULTILINE)
     ]
     if missing:
-       # raise ValueError(
-        #    f"{option_name} is incompatible with this board or ESP-IDF "
-         #   f"configuration; Kconfig rejected: {', '.join(missing)}"
-       # )
+        raise ValueError(
+            f"{option_name} is incompatible with this board or ESP-IDF "
+            f"configuration; Kconfig rejected: {', '.join(missing)}"
+        )
 
 
 def _validate_configured_options(options: list[str], option_name: str) -> None:
