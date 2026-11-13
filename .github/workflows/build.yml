@@ -17,33 +17,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build otto-robot variant
+      - name: Build and Merge Full Firmware
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理删除一切历史残留和错误配置
+          # 1. 物理清理一切历史残留（防止幽灵覆盖）
           rm -f sdkconfig sdkconfig.old
           rm -rf build
           
-          # 2. 【核心清洗】强行重写 config.json，只保留板型，绝不包含唤醒词冲突项
-          cat > main/boards/otto-robot/config.json << 'EOF'
-          {
-            "type": "otto-robot",
-            "target": "esp32s3",
-            "builds": [
-              {
-                "name": "otto-robot",
-                "sdkconfig_append": [
-                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y"
-                ]
-              }
-            ]
-          }
-          EOF
-          
-          # 3. 强行生成 S3 专属配置（包含降频、内存、资源和卡卡唤醒词）
+          # 2. 强行生成 S3 专属配置，把我们的要求“焊死”在最高优先级
           cat > sdkconfig.defaults.esp32s3 << 'EOF'
           CONFIG_IDF_TARGET="esp32s3"
           CONFIG_BOARD_TYPE_OTTO_ROBOT=y
@@ -66,12 +50,10 @@ jobs:
           CONFIG_LV_MEM_CUSTOM=y
           CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
           
-          # 资源打包
+          # 【核心】强制打开资源打包，关闭官方 AFE 唤醒，开启自定义“卡卡”
           CONFIG_FLASH_DEFAULT_ASSETS=y
           CONFIG_USE_DEFAULT_ASSETS=y
           CONFIG_LANGUAGE_ZH_CN=y
-          
-          # 关闭 AFE，开启自定义“卡卡”
           CONFIG_USE_AFE_WAKE_WORD=n
           CONFIG_USE_WAKENET=n
           CONFIG_SR_WN_WN9_HIESP=n
@@ -82,12 +64,28 @@ jobs:
           CONFIG_SR_MN_CN_MULTINET7_QUANT=y
           EOF
           
-          # 4. 直接交给官方脚本，它会自动下载组件、打包字库、生成大文件！
-          python scripts/build.py otto-robot --name otto-robot
+          # 3. 生成语言包
+          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
+          
+          # 4. 直接用原生 idf.py 编译！CMake 脚本会自动把字库和表情打包进 generated_assets.bin
+          idf.py reconfigure
+          idf.py build
+          
+          # 5. 检查资源包大小是否正常（正常应该 > 2MB）
+          cd build
+          ls -lh generated_assets.bin
+          
+          # 6. 强制合并所有文件（生成完整的固件）
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            0x0 bootloader/bootloader.bin \
+            0x8000 partition_table/partition-table.bin \
+            0x10000 xiaozhi.bin \
+            0x810000 generated_assets.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/merged-binary.bin
+          path: xiaozhi-esp32/build/otto-firmware-full.bin
           if-no-files-found: error
