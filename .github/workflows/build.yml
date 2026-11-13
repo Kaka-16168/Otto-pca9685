@@ -23,21 +23,75 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 【物理清理】删除所有旧配置，确保下面的强制配置生效
+          # 1. 物理清理一切历史残留
           rm -f sdkconfig sdkconfig.old
           rm -rf build
           
-          # 2. 生成语言包
+          # 2. 强行重写 config.json，只留板型
+          cat > main/boards/otto-robot/config.json << 'EOF'
+          {
+            "type": "otto-robot",
+            "target": "esp32s3",
+            "builds": [
+              {
+                "name": "otto-robot",
+                "sdkconfig_append": [
+                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y"
+                ]
+              }
+            ]
+          }
+          EOF
+          
+          # 3. 强行生成 S3 专属配置
+          cat > sdkconfig.defaults.esp32s3 << 'EOF'
+          CONFIG_IDF_TARGET="esp32s3"
+          CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+          CONFIG_HTTPD_WS_SUPPORT=y
+          CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+          CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+          CONFIG_PARTITION_TABLE_CUSTOM=y
+          CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+          CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
+          CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+          CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+          CONFIG_SPIRAM=y
+          CONFIG_SPIRAM_MODE_OCT=y
+          CONFIG_SPIRAM_SPEED_80M=y
+          CONFIG_SPIRAM_USE_MALLOC=y
+          CONFIG_FLASH_DEFAULT_ASSETS=y
+          CONFIG_USE_DEFAULT_ASSETS=y
+          CONFIG_LANGUAGE_ZH_CN=y
+          CONFIG_USE_AFE_WAKE_WORD=n
+          CONFIG_USE_WAKENET=n
+          CONFIG_SR_WN_WN9_HIESP=n
+          CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
+          CONFIG_USE_CUSTOM_WAKE_WORD=y
+          CONFIG_CUSTOM_WAKE_WORD="ka ka"
+          CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
+          CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+          EOF
+          
+          # 4. 编译主程序
+          idf.py reconfigure
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
+          idf.py build
           
-          # 3. 【核心】使用原生 idf.py 编译，并指定配置文件
-          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
+          # 5. 【核心修复】强制调用打包脚本，传入所有必须参数！
+          # 这里使用 find 找到了 esp-sr 的模型路径，确保唤醒词模型被打进去
+          python scripts/build_default_assets.py \
+            --output build/generated_assets.bin \
+            --sdkconfig sdkconfig \
+            --builtin_text_font font_noto_sans_basic_16_4 \
+            --emoji_collection otto-gif \
+            --esp_sr_model_path $(find managed_components -type d -name "model" -path "*esp-sr*" | head -n 1) \
+            --noto_fonts_path $(find managed_components -maxdepth 1 -type d -name "*xiaozhi-fonts*" | head -n 1)
           
-          # 4. 检查关键产物
+          # 6. 检查资源包大小（必须大于 2.5MB）
           cd build
           ls -lh generated_assets.bin
           
-          # 5. 【终极合并】硬编码地址，生成一个完整的单文件固件
+          # 7. 强制合并固件
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 40m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
