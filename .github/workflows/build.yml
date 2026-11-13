@@ -26,17 +26,16 @@ jobs:
           # 1. 生成语言包
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
-          # 2. 强制清理缓存，直接使用 IDF 原生编译（绝对不会再拦唤醒词）
+          # 2. 强制清理缓存，直接使用 IDF 原生编译
           idf.py fullclean
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 3. 使用官方自动合并命令，它会自动读取 DIO/40M 和所有文件地址
+          # 3. 官方自动合并命令，自动读取 DIO/40M 和所有文件地址
           idf.py merge-bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          # 官方 merge-bin 默认生成的文件名
           path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
