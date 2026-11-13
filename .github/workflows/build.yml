@@ -23,19 +23,22 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 生成语言包
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
-          
-          # 2. 强制清理缓存，直接使用 IDF 原生编译
           idf.py fullclean
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 3. 官方自动合并命令，自动读取 DIO/40M 和所有文件地址
-          idf.py merge-bin
+          cd build
+          # 【核心暴力合并】把 Bootloader、分区表、主程序、资源包 按地址死死拼在一起
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+            --flash_mode dio --flash_freq 80m --flash_size 16MB \
+            0x0 bootloader/bootloader.bin \
+            0x8000 partition_table/partition-table.bin \
+            0x10000 xiaozhi.bin \
+            0x810000 generated_assets.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/merged-binary.bin
+          path: xiaozhi-esp32/build/otto-firmware-full.bin
           if-no-files-found: error
