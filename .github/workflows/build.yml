@@ -23,48 +23,34 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理删除一切可能的旧缓存
+          # 1. 物理清理一切历史残留（包括幽灵 sdkconfig）
           rm -f sdkconfig sdkconfig.old
-          rm -rf build
+          idf.py fullclean
           
-          # 2. 强行重写板卡级 config.json（一丁点 AFE 都不留）
-          cat > main/boards/otto-robot/config.json << 'EOF'
-          {
-            "type": "otto-robot",
-            "target": "esp32s3",
-            "builds": [
-              {
-                "name": "otto-robot",
-                "sdkconfig_append": [
-                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
-                  "CONFIG_USE_AFE_WAKE_WORD=n",
-                  "CONFIG_USE_CUSTOM_WAKE_WORD=y",
-                  "CONFIG_USE_WAKENET=n",
-                  "CONFIG_SR_WN_WN9_HIESP=n",
-                  "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n",
-                  "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"",
-                  "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"",
-                  "CONFIG_SR_MN_CN_MULTINET7_QUANT=y"
-                ]
-              }
-            ]
-          }
-          EOF
-          
-          # 3. 强行重写全局 sdkconfig.defaults.esp32s3（保命降频 + 资源强制打包）
+          # 2. 强行生成 S3 专属配置（最高优先级）
           cat > sdkconfig.defaults.esp32s3 << 'EOF'
           CONFIG_IDF_TARGET="esp32s3"
           CONFIG_BOARD_TYPE_OTTO_ROBOT=y
           CONFIG_HTTPD_WS_SUPPORT=y
           CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
           CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
-          CONFIG_PARTITION_TABLE_CUSTOM=y
-          CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
-          CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
+          
+          # 【降频保命】防止芯片读取 Flash 失败
           CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
           CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+          
+          # 【内存救命】必须开启 8MB PSRAM
+          CONFIG_SPIRAM=y
+          CONFIG_SPIRAM_MODE_OCT=y
+          CONFIG_SPIRAM_SPEED_80M=y
+          CONFIG_SPIRAM_USE_MALLOC=y
+          CONFIG_LV_MEM_CUSTOM=y
+          CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
+          
+          # 【资源与唤醒词】强制打包字库，强制开启“卡卡”并关闭官方 Hi ESP
           CONFIG_FLASH_DEFAULT_ASSETS=y
           CONFIG_USE_DEFAULT_ASSETS=y
+          CONFIG_LANGUAGE_ZH_CN=y
           CONFIG_USE_AFE_WAKE_WORD=n
           CONFIG_USE_WAKENET=n
           CONFIG_SR_WN_WN9_HIESP=n
@@ -73,19 +59,14 @@ jobs:
           CONFIG_CUSTOM_WAKE_WORD="ka ka"
           CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
           CONFIG_SR_MN_CN_MULTINET7_QUANT=y
-          CONFIG_SPIRAM=y
-          CONFIG_SPIRAM_MODE_OCT=y
-          CONFIG_SPIRAM_USE_MALLOC=y
-          CONFIG_LV_MEM_CUSTOM=y
-          CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
           EOF
           
-          # 4. 清理并直接使用原生 idf.py 编译（彻底抛弃有病的 build.py）
-          idf.py fullclean
+          # 3. 编译主程序
+          idf.py reconfigure
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           idf.py build
           
-          # 5. 【暴力打包资源】使用通配符自动寻找依赖路径，强制生成大于 2.5MB 的 assets
+          # 4. 【暴力打包资源】用 find 自动寻找依赖路径，杜绝 0 字节资源包
           python scripts/build_default_assets.py \
             --output build/generated_assets.bin \
             --sdkconfig sdkconfig \
@@ -94,11 +75,11 @@ jobs:
             --esp_sr_model_path $(find managed_components -type d -name "model" | grep "esp-sr" | head -n 1) \
             --noto_fonts_path $(find managed_components -maxdepth 1 -type d -name "xiaozhi-fonts" | head -n 1)
           
-          # 6. 检查资源包是否大于 0
+          # 5. 检查资源包大小
           cd build
           ls -lh generated_assets.bin
           
-          # 7. 强制合并
+          # 6. 强制合并固件
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 40m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
