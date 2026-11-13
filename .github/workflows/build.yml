@@ -17,30 +17,84 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build otto-robot variant
+      - name: Build and Merge Full Firmware
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
+          # 1. 物理清理一切历史残留（彻底洗脑）
           rm -f sdkconfig sdkconfig.old
           rm -rf build
           
-          # 【魔法修复】安全地把拦截报错变成打印，绝对不破坏语法！
-          python -c "
-          with open('scripts/build.py', 'r') as f:
-              content = f.read()
-          content = content.replace('raise ValueError(', 'print(')
-          with open('scripts/build.py', 'w') as f:
-              f.write(content)
-          "
+          # 2. 强行生成 S3 专属配置（降频、内存、资源）
+          cat > sdkconfig.defaults.esp32s3 << 'EOF'
+          CONFIG_IDF_TARGET="esp32s3"
+          CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+          CONFIG_HTTPD_WS_SUPPORT=y
+          CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+          CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+          CONFIG_PARTITION_TABLE_CUSTOM=y
+          CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+          CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
+          CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+          CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+          CONFIG_SPIRAM=y
+          CONFIG_SPIRAM_MODE_OCT=y
+          CONFIG_SPIRAM_SPEED_80M=y
+          CONFIG_SPIRAM_USE_MALLOC=y
+          CONFIG_FLASH_DEFAULT_ASSETS=y
+          CONFIG_USE_DEFAULT_ASSETS=y
+          CONFIG_LANGUAGE_ZH_CN=y
+          CONFIG_USE_AFE_WAKE_WORD=n
+          CONFIG_USE_WAKENET=n
+          CONFIG_SR_WN_WN9_HIESP=n
+          CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
+          CONFIG_USE_CUSTOM_WAKE_WORD=y
+          CONFIG_CUSTOM_WAKE_WORD="ka ka"
+          CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
+          CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+          EOF
           
-        
-          python scripts/build.py otto-robot --name otto-robot
+          # 3. 生成语言包并编译
+          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
+          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
+          
+          # 4. 【核心修复】在编译完成后，强行向生成的真实 sdkconfig 追加模型配置！
+          # 这是为了防止打包脚本读取到的配置不完整导致跳过模型
+          echo "CONFIG_USE_CUSTOM_WAKE_WORD=y" >> sdkconfig
+          echo "CONFIG_SR_MN_CN_MULTINET7_QUANT=y" >> sdkconfig
+          echo "CONFIG_USE_AFE_WAKE_WORD=n" >> sdkconfig
+          echo "CONFIG_DEFAULT_EMOJI_COLLECTION=\"otto-gif\"" >> sdkconfig
+          
+          # 5. 强制重新调用打包脚本（此时读取的 sdkconfig 已经被我们篡改，必定会打包唤醒词和表情）
+          python scripts/build_default_assets.py \
+            --output build/generated_assets.bin \
+            --sdkconfig sdkconfig \
+            --builtin_text_font font_noto_sans_basic_16_4 \
+            --emoji_collection otto-gif \
+            --esp_sr_model_path managed_components/espressif__esp-sr/model \
+            --noto_fonts_path managed_components/78__xiaozhi-fonts
+          
+          # 6. 检查资源包大小（大于 2.5MB 才算包含唤醒词）
+          cd build
+          ls -lh generated_assets.bin
+          if [ $(stat -c%s generated_assets.bin) -lt 2000000 ]; then
+            echo "❌ 资源包依然太小，模型没打进去！"
+            exit 1
+          fi
+          
+          # 7. 强制合并固件
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            0x0 bootloader/bootloader.bin \
+            0x8000 partition_table/partition-table.bin \
+            0x10000 xiaozhi.bin \
+            0x810000 generated_assets.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/merged-binary.bin
+          path: xiaozhi-esp32/build/otto-firmware-full.bin
           if-no-files-found: error
