@@ -17,77 +17,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build otto-robot variant
+      - name: Build and Merge Full Firmware
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理清理一切历史残留
+          # 1. 【物理清理】删除所有旧配置，确保下面的强制配置生效
           rm -f sdkconfig sdkconfig.old
           rm -rf build
           
-          # 2. 强行重写 config.json，只留板型
-          cat > main/boards/otto-robot/config.json << 'EOF'
-          {
-            "type": "otto-robot",
-            "target": "esp32s3",
-            "builds": [
-              {
-                "name": "otto-robot",
-                "sdkconfig_append": [
-                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y"
-                ]
-              }
-            ]
-          }
-          EOF
+          # 2. 生成语言包
+          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
-          # 3. 强行生成 S3 专属配置
-          cat > sdkconfig.defaults.esp32s3 << 'EOF'
-          CONFIG_IDF_TARGET="esp32s3"
-          CONFIG_BOARD_TYPE_OTTO_ROBOT=y
-          CONFIG_HTTPD_WS_SUPPORT=y
-          CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-          CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
-          CONFIG_PARTITION_TABLE_CUSTOM=y
-          CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
-          CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
-          CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
-          CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
-          CONFIG_SPIRAM=y
-          CONFIG_SPIRAM_MODE_OCT=y
-          CONFIG_SPIRAM_SPEED_80M=y
-          CONFIG_SPIRAM_USE_MALLOC=y
-          CONFIG_FLASH_DEFAULT_ASSETS=y
-          CONFIG_USE_DEFAULT_ASSETS=y
-          CONFIG_LANGUAGE_ZH_CN=y
-          CONFIG_USE_AFE_WAKE_WORD=n
-          CONFIG_USE_WAKENET=n
-          CONFIG_SR_WN_WN9_HIESP=n
-          CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
-          CONFIG_USE_CUSTOM_WAKE_WORD=y
-          CONFIG_CUSTOM_WAKE_WORD="ka ka"
-          CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
-          CONFIG_SR_MN_CN_MULTINET7_QUANT=y
-          EOF
+          # 3. 【核心】使用原生 idf.py 编译，并指定配置文件
+          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 4. 【魔法修复】只把拦截报错的那一行替换掉，不破坏 Python 缩进！
-          sed -i 's/raise ValueError(f"--wake-word is incompatible/print(f"--wake-word is incompatible/g' scripts/build.py
+          # 4. 检查关键产物
+          cd build
+          ls -lh generated_assets.bin
           
-          # 5. 运行官方脚本编译（现在不会报错了，会完美打包所有资源）
-          python scripts/build.py otto-robot --name otto-robot
-          
-          # 6. 把需要的 4 个文件复制出来准备给用户
-          mkdir -p final_bin
-          cp build/bootloader/bootloader.bin final_bin/
-          cp build/partition_table/partition-table.bin final_bin/
-          cp build/xiaozhi.bin final_bin/
-          cp build/generated_assets.bin final_bin/
+          # 5. 【终极合并】硬编码地址，生成一个完整的单文件固件
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            0x0 bootloader/bootloader.bin \
+            0x8000 partition_table/partition-table.bin \
+            0x10000 xiaozhi.bin \
+            0x810000 generated_assets.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xiaozhi_otto-robot_bins
-          path: xiaozhi-esp32/final_bin/
+          name: xiaozhi_otto-robot_full
+          path: xiaozhi-esp32/build/otto-firmware-full.bin
           if-no-files-found: error
