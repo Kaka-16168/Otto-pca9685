@@ -17,46 +17,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build otto-robot variant
+      - name: Build and Merge Full Firmware
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理删除可能残留的旧配置文件
+          # 1. 彻底清理所有缓存和残留
           rm -f sdkconfig sdkconfig.old
           idf.py fullclean
           
-          # 2. 【魔法一】强行覆盖你的 config.json，确保配置绝对纯净！
-          cat > main/boards/otto-robot/config.json << 'EOF'
-          {
-            "type": "otto-robot",
-            "target": "esp32s3",
-            "builds": [
-              {
-                "name": "otto-robot",
-                "sdkconfig_append": [
-                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y",
-                  "CONFIG_USE_AFE_WAKE_WORD=n",
-                  "CONFIG_USE_CUSTOM_WAKE_WORD=y",
-                  "CONFIG_CUSTOM_WAKE_WORD=\"ka ka\"",
-                  "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"卡卡\"",
-                  "CONFIG_SR_MN_CN_MULTINET7_QUANT=y"
-                ]
-              }
-            ]
-          }
-          EOF
+          # 2. 【核心关键】重新配置，这一步会自动去 GitHub 拉取字体和表情等依赖组件！
+          idf.py reconfigure
           
-          # 3. 【魔法二】强行注释掉 build.py 里拦截报错的代码，让它乖乖打包！
-          sed -i 's/raise ValueError(/pass # raise ValueError(/g' scripts/build.py
+          # 3. 生成语言包
+          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
-          # 4. 运行官方脚本（现在配置被强制修正了，它绝对不报错，且会打包出巨大的资源文件）
-          python scripts/build.py otto-robot --name otto-robot
+          # 4. 正式编译（此时 CMake 会读取 otto-robot 的配置，找到下载好的组件并打包资源）
+          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
+          
+          # 5. 合并
+          cd build
+          ls -lh generated_assets.bin
+          
+          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            0x0 bootloader/bootloader.bin \
+            0x8000 partition_table/partition-table.bin \
+            0x10000 xiaozhi.bin \
+            0x810000 generated_assets.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/merged-binary.bin
+          path: xiaozhi-esp32/build/otto-firmware-full.bin
           if-no-files-found: error
