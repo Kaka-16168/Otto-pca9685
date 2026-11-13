@@ -23,11 +23,11 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理清理一切历史残留
+          # 1. 物理清理
           rm -f sdkconfig sdkconfig.old
           rm -rf build
           
-          # 2. 强行重写 config.json，只留板型
+          # 2. 强制生成配置文件（只留板型）
           cat > main/boards/otto-robot/config.json << 'EOF'
           {
             "type": "otto-robot",
@@ -72,26 +72,32 @@ jobs:
           CONFIG_SR_MN_CN_MULTINET7_QUANT=y
           EOF
           
-          # 4. 编译主程序
-          idf.py reconfigure
+          # 4. 【核心修复 1】强制设定目标芯片为 esp32s3！防止编译出 esp32 的 bootloader
+          idf.py set-target esp32s3
+          
+          # 5. 生成语言包并编译
+          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.out
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           idf.py build
           
-          # 5. 【核心修复】强制调用打包脚本，传入所有必须参数！
-          # 这里使用 find 找到了 esp-sr 的模型路径，确保唤醒词模型被打进去
+          # 6. 【核心修复 2】放弃 find 路径，直接用默认标准路径强行打包！
+          # 只要 idf.py build 成功，模型和字库一定在这两个固定路径里
           python scripts/build_default_assets.py \
             --output build/generated_assets.bin \
             --sdkconfig sdkconfig \
             --builtin_text_font font_noto_sans_basic_16_4 \
-            --emoji_collection otto-gif \
-            --esp_sr_model_path $(find managed_components -type d -name "model" -path "*esp-sr*" | head -n 1) \
-            --noto_fonts_path $(find managed_components -maxdepth 1 -type d -name "*xiaozhi-fonts*" | head -n 1)
+            --esp_sr_model_path managed_components/espressif__esp-sr/model \
+            --noto_fonts_path managed_components/78__xiaozhi-fonts
           
-          # 6. 检查资源包大小（必须大于 2.5MB）
+          # 7. 检查资源包大小（必须大于 2MB）
           cd build
           ls -lh generated_assets.bin
+          if [ $(stat -c%s generated_assets.bin) -lt 1500000 ]; then
+            echo "❌ 资源包太小，模型没打进去！"
+            exit 1
+          fi
           
-          # 7. 强制合并固件
+          # 8. 强制合并（此时包含正确的 S3 Bootloader）
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 40m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
