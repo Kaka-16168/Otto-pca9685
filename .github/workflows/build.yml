@@ -1,4 +1,4 @@
--name: Build Boards
+name: Build Otto Firmware
 on:
   workflow_dispatch: 
   push:
@@ -17,59 +17,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and Merge Full Firmware
+      - name: Build and Merge
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理清理一切历史残留（包括幽灵 sdkconfig）
+          # 1. 彻底清理
           rm -f sdkconfig sdkconfig.old
           idf.py fullclean
           
-          # 2. 强行生成 S3 专属配置（最高优先级）
-          cat > sdkconfig.defaults.esp32s3 << 'EOF'
-          CONFIG_IDF_TARGET="esp32s3"
-          CONFIG_BOARD_TYPE_OTTO_ROBOT=y
-          CONFIG_HTTPD_WS_SUPPORT=y
-          CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-          CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
-          CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
-          CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
-          CONFIG_SPIRAM=y
-          CONFIG_SPIRAM_MODE_OCT=y
-          CONFIG_SPIRAM_SPEED_80M=y
-          CONFIG_SPIRAM_USE_MALLOC=y
-          CONFIG_LV_MEM_CUSTOM=y
-          CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
-          CONFIG_FLASH_DEFAULT_ASSETS=y
-          CONFIG_USE_DEFAULT_ASSETS=y
-          CONFIG_LANGUAGE_ZH_CN=y
-          CONFIG_USE_AFE_WAKE_WORD=n
-          CONFIG_USE_WAKENET=n
-          CONFIG_SR_WN_WN9_HIESP=n
-          CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
-          CONFIG_USE_CUSTOM_WAKE_WORD=y
-          CONFIG_CUSTOM_WAKE_WORD="ka ka"
-          CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
-          CONFIG_SR_MN_CN_MULTINET7_QUANT=y
-          EOF
+          # 2. 强制写入 S3 的配置文件（最高优先级，锁死配置）
+          cat > sdkconfig.defaults.esp32s3 << EOF
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_LV_MEM_CUSTOM=y
+CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
+CONFIG_FLASH_DEFAULT_ASSETS=y
+CONFIG_USE_DEFAULT_ASSETS=y
+CONFIG_LANGUAGE_ZH_CN=y
+CONFIG_USE_AFE_WAKE_WORD=n
+CONFIG_USE_WAKENET=n
+CONFIG_SR_WN_WN9_HIESP=n
+CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
+CONFIG_USE_CUSTOM_WAKE_WORD=y
+CONFIG_CUSTOM_WAKE_WORD="ka ka"
+CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
+CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+EOF
           
-          # 3. 编译主程序（这一步会自动下载组件到 managed_components）
+          # 3. 编译
           idf.py reconfigure
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           idf.py build
           
-          # 4. 【修复路径问题】使用模糊匹配寻找组件路径
-          echo "当前 managed_components 目录下的组件："
-          ls -1 managed_components || true
+          # 4. 寻找组件路径（使用 ls 代替 find，更稳定）
+          echo "Managed components list:"
+          ls -1 managed_components
           
-          # 匹配 *xiaozhi-fonts* 和 *esp-sr*/model
-          NOTO_PATH=$(find managed_components -maxdepth 1 -type d -name "*xiaozhi-fonts*" | head -n 1)
-          ESP_SR_PATH=$(find managed_components -type d -name "model" -path "*esp-sr*" | head -n 1)
+          NOTO_PATH=$(ls -d managed_components/*xiaozhi-fonts* 2>/dev/null | head -n 1)
+          ESP_SR_PATH=$(ls -d managed_components/*esp-sr*/model 2>/dev/null | head -n 1)
           
-          echo "找到字体路径: $NOTO_PATH"
-          echo "找到语音模型路径: $ESP_SR_PATH"
+          echo "NOTO_PATH: $NOTO_PATH"
+          echo "ESP_SR_PATH: $ESP_SR_PATH"
           
           # 5. 强制打包资源
           python scripts/build_default_assets.py \
@@ -80,11 +79,8 @@ jobs:
             --esp_sr_model_path "$ESP_SR_PATH" \
             --noto_fonts_path "$NOTO_PATH"
           
-          # 6. 检查资源包大小
+          # 6. 合并固件
           cd build
-          ls -lh generated_assets.bin
-          
-          # 7. 强制合并固件（注意这里用的是 0x810000）
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 40m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
