@@ -51,9 +51,9 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .power_adc_channel = ADC_CHANNEL_3,
 
     // 原生舵机引脚废弃（使用 PCA9685）
-    .right_leg_pin = GPIO_NUM_NC, .right_foot_pin = GPIO_NUM_NC,
-    .left_leg_pin = GPIO_NUM_NC, .left_foot_pin = GPIO_NUM_NC,
-    .left_hand_pin = GPIO_NUM_NC, .right_hand_pin = GPIO_NUM_NC,
+    .right_leg_pin = GPIO_NUM_1, .right_foot_pin = GPIO_NUM_2,
+    .left_leg_pin = GPIO_NUM_3, .left_foot_pin = GPIO_NUM_17,
+    .left_hand_pin = GPIO_NUM_18, .right_hand_pin = GPIO_NUM_38,
 
     .audio_input_sample_rate = 16000,
     .audio_output_sample_rate = 24000,
