@@ -28,7 +28,6 @@ jobs:
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
           cd build
-          # 【核心暴力合并】把 Bootloader、分区表、主程序、资源包 按地址死死拼在一起
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 80m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
