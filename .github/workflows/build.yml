@@ -1,4 +1,4 @@
-name: Build Otto Firmware
+name: Build Boards
 on:
   workflow_dispatch: 
   push:
@@ -17,80 +17,77 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and Merge
+      - name: Build otto-robot variant
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 彻底清理
+          # 1. 物理删除一切历史残留和错误配置
           rm -f sdkconfig sdkconfig.old
-          idf.py fullclean
+          rm -rf build
           
-          # 2. 强制写入 S3 的配置文件（最高优先级，锁死配置）
-          cat > sdkconfig.defaults.esp32s3 << EOF
-CONFIG_IDF_TARGET="esp32s3"
-CONFIG_BOARD_TYPE_OTTO_ROBOT=y
-CONFIG_HTTPD_WS_SUPPORT=y
-CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
-CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
-CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
-CONFIG_SPIRAM=y
-CONFIG_SPIRAM_MODE_OCT=y
-CONFIG_SPIRAM_SPEED_80M=y
-CONFIG_SPIRAM_USE_MALLOC=y
-CONFIG_LV_MEM_CUSTOM=y
-CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
-CONFIG_FLASH_DEFAULT_ASSETS=y
-CONFIG_USE_DEFAULT_ASSETS=y
-CONFIG_LANGUAGE_ZH_CN=y
-CONFIG_USE_AFE_WAKE_WORD=n
-CONFIG_USE_WAKENET=n
-CONFIG_SR_WN_WN9_HIESP=n
-CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
-CONFIG_USE_CUSTOM_WAKE_WORD=y
-CONFIG_CUSTOM_WAKE_WORD="ka ka"
-CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
-CONFIG_SR_MN_CN_MULTINET7_QUANT=y
-EOF
+          # 2. 【核心清洗】强行重写 config.json，只保留板型，绝不包含唤醒词冲突项
+          cat > main/boards/otto-robot/config.json << 'EOF'
+          {
+            "type": "otto-robot",
+            "target": "esp32s3",
+            "builds": [
+              {
+                "name": "otto-robot",
+                "sdkconfig_append": [
+                  "CONFIG_BOARD_TYPE_OTTO_ROBOT=y"
+                ]
+              }
+            ]
+          }
+          EOF
           
-          # 3. 编译
-          idf.py reconfigure
-          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
-          idf.py build
+          # 3. 强行生成 S3 专属配置（包含降频、内存、资源和卡卡唤醒词）
+          cat > sdkconfig.defaults.esp32s3 << 'EOF'
+          CONFIG_IDF_TARGET="esp32s3"
+          CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+          CONFIG_HTTPD_WS_SUPPORT=y
+          CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+          CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+          CONFIG_PARTITION_TABLE_CUSTOM=y
+          CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/16m.csv"
+          CONFIG_PARTITION_TABLE_FILENAME="partitions/v2/16m.csv"
           
-          # 4. 寻找组件路径（使用 ls 代替 find，更稳定）
-          echo "Managed components list:"
-          ls -1 managed_components
+          # 降频保命
+          CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+          CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
           
-          NOTO_PATH=$(ls -d managed_components/*xiaozhi-fonts* 2>/dev/null | head -n 1)
-          ESP_SR_PATH=$(ls -d managed_components/*esp-sr*/model 2>/dev/null | head -n 1)
+          # 8MB PSRAM
+          CONFIG_SPIRAM=y
+          CONFIG_SPIRAM_MODE_OCT=y
+          CONFIG_SPIRAM_SPEED_80M=y
+          CONFIG_SPIRAM_USE_MALLOC=y
+          CONFIG_LV_MEM_CUSTOM=y
+          CONFIG_LV_MEM_CUSTOM_INCLUDE="stdlib.h"
           
-          echo "NOTO_PATH: $NOTO_PATH"
-          echo "ESP_SR_PATH: $ESP_SR_PATH"
+          # 资源打包
+          CONFIG_FLASH_DEFAULT_ASSETS=y
+          CONFIG_USE_DEFAULT_ASSETS=y
+          CONFIG_LANGUAGE_ZH_CN=y
           
-          # 5. 强制打包资源
-          python scripts/build_default_assets.py \
-            --output build/generated_assets.bin \
-            --sdkconfig sdkconfig \
-            --builtin_text_font font_noto_sans_basic_16_4 \
-            --emoji_collection otto-gif \
-            --esp_sr_model_path "$ESP_SR_PATH" \
-            --noto_fonts_path "$NOTO_PATH"
+          # 关闭 AFE，开启自定义“卡卡”
+          CONFIG_USE_AFE_WAKE_WORD=n
+          CONFIG_USE_WAKENET=n
+          CONFIG_SR_WN_WN9_HIESP=n
+          CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=n
+          CONFIG_USE_CUSTOM_WAKE_WORD=y
+          CONFIG_CUSTOM_WAKE_WORD="ka ka"
+          CONFIG_CUSTOM_WAKE_WORD_DISPLAY="卡卡"
+          CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+          EOF
           
-          # 6. 合并固件
-          cd build
-          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
-            --flash_mode dio --flash_freq 40m --flash_size 16MB \
-            0x0 bootloader/bootloader.bin \
-            0x8000 partition_table/partition-table.bin \
-            0x10000 xiaozhi.bin \
-            0x810000 generated_assets.bin
+          # 4. 直接交给官方脚本，它会自动下载组件、打包字库、生成大文件！
+          python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+          path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
