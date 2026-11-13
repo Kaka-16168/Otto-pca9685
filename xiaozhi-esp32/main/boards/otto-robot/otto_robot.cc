@@ -63,7 +63,7 @@ private:
         io_config.cs_gpio_num = hw_config_.display_cs_pin;
         io_config.dc_gpio_num = hw_config_.display_dc_pin;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 20 * 1000 * 1000;
+        io_config.pclk_hz = 40 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -98,10 +98,13 @@ private:
         });
     }
 
+    // 独立任务：延时 5 秒再初始化舵机，此时系统早就启动完毕了
     static void OttoInitTask(void* arg) {
         OttoRobot* self = static_cast<OttoRobot*>(arg);
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        
         otto_pca_init(); 
+        ESP_LOGI(TAG, ">>> 舵机后台初始化完成，恢复至 90 度 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(50)); 
@@ -119,7 +122,6 @@ public:
         InitializeButtons();
         InitializePowerManager();
         
-        // 【核心修复】确保音频芯片正确初始化单工模式（麦克风和喇叭独立引脚）
         if (hw_config_.audio_use_simplex) {
             audio_codec_ = new NoAudioCodecSimplex(
                 hw_config_.audio_input_sample_rate, hw_config_.audio_output_sample_rate,
@@ -133,6 +135,7 @@ public:
                 hw_config_.audio_i2s_gpio_dout, hw_config_.audio_i2s_gpio_din);
         }
 
+        // 启动后台延时任务
         xTaskCreate(OttoInitTask, "otto_init", 4096, this, 3, NULL);
 
         ws_control_server_ = nullptr;
@@ -164,10 +167,6 @@ public:
             cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
             cJSON_DeleteItemFromObject(root, "screen_type");
             cJSON_AddStringToObject(root, "screen_type", "ST7789");
-            cJSON_DeleteItemFromObject(root, "screen_width");
-            cJSON_AddNumberToObject(root, "screen_width", 240);
-            cJSON_DeleteItemFromObject(root, "screen_height");
-            cJSON_AddNumberToObject(root, "screen_height", 240);
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
             cJSON_free(newJson);
