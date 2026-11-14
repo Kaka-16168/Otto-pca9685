@@ -23,34 +23,21 @@ jobs:
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 物理清理一切历史残留
+          # 1. 【物理清理】删除所有旧配置，确保下面的强制配置生效
           rm -f sdkconfig sdkconfig.old
           rm -rf build
           
           # 2. 生成语言包
           python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
           
-          # 3. 编译主程序
+          # 3. 【核心】使用原生 idf.py 编译，并指定配置文件
           idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
           
-          # 4. 强行向 sdkconfig 追加模型配置
-          echo "CONFIG_USE_AFE_WAKE_WORD=y" >> sdkconfig
-          echo "CONFIG_USE_WAKENET=y" >> sdkconfig
-          echo "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y" >> sdkconfig
-          
-          # 5. 手动调用打包脚本
-          python scripts/build_default_assets.py \
-            --output build/generated_assets.bin \
-            --sdkconfig sdkconfig \
-            --builtin_text_font font_noto_sans_basic_16_4 \
-            --esp_sr_model_path managed_components/espressif__esp-sr/model \
-            --noto_fonts_path managed_components/78__xiaozhi-fonts
-          
-          # 6. 检查是否生成（只检查文件是否存在，不检查大小）
+          # 4. 检查关键产物
           cd build
           ls -lh generated_assets.bin
           
-          # 7. 强制合并固件
+          # 5. 【终极合并】硬编码地址，生成一个完整的单文件固件
           esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
             --flash_mode dio --flash_freq 40m --flash_size 16MB \
             0x0 bootloader/bootloader.bin \
