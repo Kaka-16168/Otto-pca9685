@@ -18,6 +18,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
+#include "otto_emoji_display.h" // 【恢复】引入官方动态表情库
 #include "power_manager.h"
 #include "system_reset.h"
 #include "websocket_control_server.h"
@@ -81,10 +82,10 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
-        // 【防御】彻底放弃动态表情类，使用最稳的纯文本 LCD 驱动
-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // 【核心恢复】换回 OttoEmojiDisplay，动态表情回来了
+        display_ = new OttoEmojiDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
@@ -98,13 +99,12 @@ private:
         });
     }
 
-    // 独立后台任务初始化舵机
     static void OttoInitTask(void* arg) {
         OttoRobot* self = static_cast<OttoRobot*>(arg);
         vTaskDelay(pdMS_TO_TICKS(3000));
         
         otto_pca_init(); 
-        ESP_LOGI(TAG, ">>> 舵机后台初始化完成，恢复至 90 度 <<<");
+        ESP_LOGI(TAG, ">>> 舵机后台初始化完成 <<<");
         for (int i = 0; i < 6; i++) {
             otto_pca_set_servo_angle(i, 90);
             vTaskDelay(pdMS_TO_TICKS(50)); 
@@ -158,21 +158,18 @@ public:
 
     virtual Camera* GetCamera() override { return nullptr; }
 
-    // 【终极拦截】强行篡改上报给云端的表情集，拒绝下发 robot_2
+    // 【防崩核心】彻底切断云端下发动态表情的路！
     virtual std::string GetDeviceStatusJson() override {
         std::string baseJson = WifiBoard::GetDeviceStatusJson();
         cJSON* root = cJSON_Parse(baseJson.c_str());
         if (root != nullptr) {
             cJSON_DeleteItemFromObject(root, "chip_name");
             cJSON_AddStringToObject(root, "chip_name", "ESP32-S3-N16R8");
-            
             cJSON_DeleteItemFromObject(root, "screen_type");
             cJSON_AddStringToObject(root, "screen_type", "ST7789");
-
-            // 彻底抹除一切表情集相关字段
-            cJSON_DeleteItemFromObject(root, "emoji_collection");
-            // 如果底层必须读这个字段，我们强行塞给它 "otto-gif"，让它永远不会去找 robot_2
-            cJSON_AddStringToObject(root, "emoji_collection", "otto-gif"); 
+            
+            // 极其关键：删除 emoji_collection，告诉云端“别发 robot_2 过来，我只用默认表情！”
+            cJSON_DeleteItemFromObject(root, "emoji_collection"); 
             
             char* newJson = cJSON_PrintUnformatted(root);
             std::string result(newJson);
