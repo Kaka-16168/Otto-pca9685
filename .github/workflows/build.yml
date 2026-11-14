@@ -1,8 +1,10 @@
 name: Build Boards
+
 on:
   workflow_dispatch: 
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -17,37 +19,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and Merge Full Firmware
+      - name: Build otto-robot variant
         shell: bash
         run: |
           source "$IDF_PATH/export.sh"
           cd xiaozhi-esp32
           
-          # 1. 【物理清理】删除所有旧配置，确保下面的强制配置生效
-          rm -f sdkconfig sdkconfig.old
-          rm -rf build
-          
-          # 2. 生成语言包
-          python scripts/gen_lang.py --language zh-CN --output main/assets/lang_config.h
-          
-          # 3. 【核心】使用原生 idf.py 编译，并指定配置文件
-          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3" build
-          
-          # 4. 检查关键产物
-          cd build
-          ls -lh generated_assets.bin
-          
-          # 5. 【终极合并】硬编码地址，生成一个完整的单文件固件
-          esptool.py --chip esp32s3 merge_bin -o otto-firmware-full.bin \
-            --flash_mode dio --flash_freq 40m --flash_size 16MB \
-            0x0 bootloader/bootloader.bin \
-            0x8000 partition_table/partition-table.bin \
-            0x10000 xiaozhi.bin \
-            0x810000 generated_assets.bin
+          # 使用官方脚本进行编译，它会自动处理资源包并生成完整的 bin
+          python scripts/build.py otto-robot --name otto-robot
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xiaozhi_otto-robot_full
-          path: xiaozhi-esp32/build/otto-firmware-full.bin
+          name: xiaozhi_otto-robot_${{ github.sha }}
+          # 官方脚本通常会将合并后的固件放在这里
+          path: xiaozhi-esp32/build/merged-binary.bin
           if-no-files-found: error
