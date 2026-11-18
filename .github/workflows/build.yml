@@ -1,37 +1,41 @@
-name: Build Boards
+name: Build Otto-Robot Firmware
 
 on:
-  workflow_dispatch: 
   push:
-    branches:
-      - main
-
-permissions:
-  contents: read
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build_otto:
-    name: Build otto-robot
+  build-otto:
+    name: Build Otto-Robot (esp32s3)
     runs-on: ubuntu-latest
-    container:
-      image: espressif/idf:release-v6.1
+
     steps:
-      - name: Checkout
+      - name: Checkout repo (full submodules)
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Build otto-robot variant
-        shell: bash
-        run: |
-          source "$IDF_PATH/export.sh"
-          cd xiaozhi-esp32
-          
-          # 使用官方脚本进行编译，它会自动处理资源包并生成完整的 bin
-          python scripts/build.py otto-robot --name otto-robot
+      # 👇 已完全删除报错的探测脚本，直接对齐 xiaozhi-esp32 官方 CI 写法
+      - name: Build Otto-Robot with ESP-IDF Action
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.2
+          target: esp32s3
+          path: xiaozhi-esp32
+          command: idf.py -DBOARD_TYPE=otto-robot build
 
-      - name: Upload artifacts
+      - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: xiaozhi_otto-robot_${{ github.sha }}
-          # 官方脚本通常会将合并后的固件放在这里
-          path: xiaozhi-esp32/build/merged-binary.bin
+          name: otto-robot-firmware-esp32s3
+          path: |
+            xiaozhi-esp32/build/*.bin
+            xiaozhi-esp32/build/*.elf
+            xiaozhi-esp32/build/bootloader/bootloader.bin
+            xiaozhi-esp32/build/partition_table/partition-table.bin
+            xiaozhi-esp32/build/flash_args
+            xiaozhi-esp32/build/merged-binary.bin
+            xiaozhi-esp32/releases/**/*.zip
           if-no-files-found: error
